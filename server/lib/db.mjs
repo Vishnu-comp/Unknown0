@@ -166,8 +166,20 @@ export function getProfile() {
   return DEFAULT_PROFILE;
 }
 
+/**
+ * A profile PUT/PATCH may carry only part of an object (e.g. just `targets`).
+ * Shallow-merging would wipe its siblings — the letter composer then dies on a
+ * missing `freeTextAnswers.salaryExpectation`. So nested groups are merged
+ * individually; arrays are still replaced wholesale (that is what "set my
+ * skills" means).
+ */
+const DEEP_KEYS = ['targets', 'freeTextAnswers', 'boolAnswers', 'location', 'diversity', 'ats'];
 export function saveProfile(patch) {
-  const merged = { ...getProfile(), ...patch };
+  const cur = getProfile();
+  const merged = { ...cur, ...patch };
+  for (const k of DEEP_KEYS) {
+    if (patch[k] && typeof patch[k] === 'object' && !Array.isArray(patch[k])) merged[k] = { ...(cur[k] || {}), ...patch[k] };
+  }
   return write('profile', merged);
 }
 

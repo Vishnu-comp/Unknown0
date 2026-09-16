@@ -136,6 +136,17 @@ console.log('\n2b. real file uploads (PDF + DOCX via multipart)');
   check('legacy .doc rejected with a fix suggestion', legacy.status === 400 && /\.docx or PDF/.test(legacy.data.error || ''), (legacy.data.error || '').slice(0, 60));
 }
 
+console.log('\n2c. structure fidelity (bullets + education from a single-line-header resume)');
+const vishnu = fs.readFileSync('data/samples/vishnu-resume.txt', 'utf8');
+const vParse = await j('/api/resume', { method: 'POST', body: JSON.stringify({ text: vishnu, applySuggestions: false }) });
+const vSum = vParse.data.resume.summary;
+check('one-line "Company — Role (stack) | dates" headers keep their bullets', vSum.experience.length === 2 && vSum.experience[0].bullets.length === 8 && vSum.experience[1].bullets.length === 3, vSum.experience.map((e) => `${e.company}:${e.bullets.length}`).join(', '));
+check('current role detected as current, dates month-aware', vSum.experience[0].current === true && vSum.experience[0].start === '2025-01' && vSum.experience[1].end === '2024-08', `${vSum.experience[0].start} → ${vSum.experience[1].end}`);
+check('education splits school / degree / years / marks instead of gluing them', vSum.education.length >= 1 && vSum.education.every((e) => e.school && !/\d{4}/.test(e.school) && !/[—–]/.test(e.school)) && vSum.education.every((e) => /Applications|Engineering|Science|Computer/.test(e.degree)), JSON.stringify(vSum.education[0] || null).slice(0, 150));
+check('role titles drop the "(stack)" suffix, contact links stay intact', vSum.experience.every((e) => !/\(/.test(e.title)) && vSum.contact.linkedin === 'linkedin.com/in/vishnu-nair-tech' && /vercel\.app/.test(vSum.contact.website || ''), vSum.experience.map((e) => e.title).join(' / '));
+check('email domain is never mistaken for a portfolio site', !/gmail|yahoo|outlook/.test(vSum.contact.website || ''), vSum.contact.website);
+check('skills + quantified wins extracted for tailoring', vSum.skills.length >= 25 && vSum.wins.length >= 4, `${vSum.skills.length} skills, ${vSum.wins.length} wins`);
+
 console.log('\n3. scoring honesty');
 const jobs = await j('/api/jobs');
 const byId = Object.fromEntries(jobs.data.jobs.map((x) => [x.jobId || x.id, x]));
@@ -340,12 +351,17 @@ check('enabled + confirmed → one POST to the ATS, app marked submitted', sendO
 check('the ATS received multipart form data with a resume field', /multipart\/form-data/.test(atsSeen[0]?.contentType || '') && /name="resume"/.test(atsSeen[0]?.raw || ''), `${(atsSeen[0]?.raw || '').length} bytes, ${atsSeen[0]?.url}`);
 check('the request carried the candidate JSON + our source tag', /"first_name"/.test(atsSeen[0]?.raw || '') && /applyflow-self-hosted/.test(atsSeen[0]?.raw || ''));
 check('second send is refused rather than duplicating the application', (await j(`/api/apps/${ghApp.id}/submit`, { method: 'POST', body: JSON.stringify({ confirm: true }) })).data.sent !== true && atsSeen.length === 1, `${atsSeen.length} total request(s)`);
-const otherApp = appsNow.find((a) => a.id !== ghApp.id) || (await j('/api/apps')).data.apps.find((a) => a.id !== ghApp.id);
+const plainJob = jobsAll.find((x) => x.id !== ghJob.id && !/greenhouse\.io|lever\.co/i.test(x.url || '') && x.match.score > 30);
+const otherDraft = plainJob ? await j('/api/apps/draft', { method: 'POST', body: JSON.stringify({ jobIds: [plainJob.id], force: true }) }) : null;
+const otherApp = (await j('/api/apps')).data.apps.find((a) => plainJob && a.jobId === plainJob.id);
 if (otherApp) {
   const bad = await j(`/api/apps/${otherApp.id}/submit-support`);
   check('a non-Greenhouse/Lever job is honestly unsupported', bad.data.support.supported === false && /LinkedIn|not a public/.test(bad.data.support.reason), (bad.data.support.reason || '').slice(0, 70));
+  const badSend = await j(`/api/apps/${otherApp.id}/submit`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+  check('and confirming anyway still sends nothing there', badSend.data.sent !== true && atsSeen.length === 1, (badSend.data.error || '').slice(0, 60));
+  void otherDraft;
 } else {
-  check('a non-Greenhouse/Lever job is honestly unsupported', true, 'only one draft in store — skipped');
+  check('a non-Greenhouse/Lever job is honestly unsupported', false, 'could not draft a comparison application');
 }
 const subs = await j('/api/submissions');
 check('submissions log records kind, dryRun, sent and ids', subs.data.submissions.every((e) => typeof e.dryRun === 'boolean' && typeof e.sent === 'boolean' && e.at), `${subs.data.submissions.length} entries`);

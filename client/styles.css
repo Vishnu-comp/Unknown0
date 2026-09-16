@@ -104,6 +104,8 @@ h4.sec:first-child { margin-top: 0; }
 .chip.flag { color: #fcd34d; border-color: rgba(245, 158, 11, 0.32); background: rgba(245, 158, 11, 0.08); }
 .chip.src { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.28); background: rgba(56, 189, 248, 0.08); }
 .chip.rm { cursor: pointer; }
+.chipbtn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; padding: 0 2px; opacity: 0.75; }
+.chipbtn:hover { opacity: 1; color: var(--brand-2); }
 .chip.rm:hover { border-color: var(--bad); color: var(--bad); }
 
 /* -------------------------------- controls -------------------------------- */

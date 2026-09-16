@@ -97,7 +97,12 @@ export function scoreJobWithCandidate(job, profile, cand) {
   const matched = required.filter((p) => cand.skillPhrases.has(p));
   const missing = required.filter((p) => !cand.skillPhrases.has(p)).slice(0, 8);
   const skillSet = new Set((profile.skills || []).map((s) => s.name.toLowerCase()));
-  const coreBoost = matched.filter((m) => skillSet.has(m)).length * 0.12;
+  /* coreBoost must reward skills the user *flagged* as core. The previous version
+     tested membership in every skill, which every match trivially satisfies — so it
+     silently acted as a flat "number of matches" bonus and inflated everyone. */
+  const coreNames = new Set((profile.skills || []).filter((s) => s.core).map((s) => String(s.name).toLowerCase()));
+  const matchedCore = matched.filter((m) => coreNames.has(String(m).toLowerCase())).length;
+  const coreBoost = matchedCore * 0.03;
   const skillScore = required.length
     ? Math.min(1, (matched.length / Math.max(4, required.length * 0.6)) + coreBoost)
     : jaccardish(cand.skillPhrases, jobPhrases);
@@ -179,8 +184,10 @@ export function scoreJobWithCandidate(job, profile, cand) {
       salaryScore = 0.25;
       belowFloor = true;
     }
-  } else if (salMin && floor && jobCur && myCur && jobCur !== myCur) {
-    // never guess FX: keep the score neutral, surface the number for a human
+  } else if (salMin && jobCur && myCur && jobCur !== myCur) {
+    // never guess FX: keep the score neutral, surface the number for a human —
+    // also when no floor is set yet, because a foreign-currency range is exactly
+    // the case where a floor would be misread
     salaryScore = 0.7;
     currencyMismatch = true;
   }
@@ -216,7 +223,7 @@ export function scoreJobWithCandidate(job, profile, cand) {
   const flags = [];
   if (underQualified) flags.push(`asks ${needYears}+ yrs (you have ~${haveYears})`);
   if (belowFloor) flags.push('below your salary floor');
-  if (currencyMismatch) flags.push(`pays in ${jobCur} (${salMin.toLocaleString()} ${jobCur}) — convert against your ${myCur} floor yourself`);
+  if (currencyMismatch) flags.push(`pays in ${jobCur} (${salMin.toLocaleString()} ${jobCur}) — ${floor ? `convert against your ${myCur} floor yourself` : 'no floor set yet, so nothing was compared'}`);
   if (got === 'intern') flags.push('internship posting');
   if (excluded.length) flags.push(`matched exclude term: ${excluded.slice(0, 2).join(', ')}`);
   if (needsSponsorship(job) && !profile.needSponsorship) flags.push('states sponsorship not provided (ok for you)');

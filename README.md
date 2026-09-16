@@ -73,6 +73,18 @@ Dev mode (rebuilds assets on change, restarts the API on `server/` changes):
 npm run dev
 ```
 
+To load your actual resume from the CLI instead of the browser (same endpoints
+the UI calls — parse it, propose a profile, seed the corpus, show the ranking):
+
+```bash
+node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15
+node scripts/load-resume.mjs --resume=resume.txt --floor=1400000   # sets the INR salary floor too
+```
+
+It only writes what your document states. The one number it deliberately leaves
+empty is the salary floor: a made-up expectation answers a real form with a
+real lie, and the score would quietly follow it.
+
 On first run the store seeds itself with 16 hand-written postings
 (`server/data/demoJobs.mjs`) so you can see scoring, letters and the pipeline
 with zero configuration. Worked path:
@@ -93,10 +105,11 @@ with zero configuration. Worked path:
 ## Tests
 
 ```bash
-npm test            # 53 field-mapper/filler checks (jsdom) + 75 tailoring/intelligence checks
-                    # + 76 direct-submit guard-rail checks (local mock ATS) + 14 render probes
-npm run test:e2e    # 104 checks: ingest → PDF/DOCX parsing → scoring → letters → caps → pipeline
-                    # → tailoring → intelligence → direct submit → exports
+npm test            # 53 field-mapper/filler checks (jsdom) · 19 match-engine invariants
+                    # · 14 render probes · 75 tailoring/intelligence checks
+                    # · 76 direct-submit guard-rail checks (local mock ATS)
+npm run test:e2e    # 111 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
+                    # pipeline → tailoring → intelligence → direct submit → exports
 npm run test:all    # both
 
 `npm run test:ats` boots a fake Greenhouse/Lever API on localhost and proves the
@@ -207,6 +220,13 @@ all pick it up automatically. Normalized shape:
 
 ---
 
+## Marking a skill "core"
+
+Click ☆ next to a skill on the Profile tab. Core skills add a small weight in
+the skills component of every score (a few points, never a re-ranking) and lead
+the cover letter. It is deliberately weak: a self-declared "core" tag should
+nudge a ranking, not fake a qualification.
+
 ## How matching works
 
 `server/lib/match.mjs`, weights (tune them there, they're honest and small):
@@ -306,8 +326,9 @@ server/
   lib/fill.mjs        fill algorithm (shared with the extension, tested)
 client/               React UI: Overview · Profile · Resume · Job matches · Applications · Settings
 extension/            MV3 prefiller (popup.html, content.js, lib/*.mjs synced at build)
-scripts/              build, dev watcher, icon gen, sample generators, tests
-                        fieldmap/fill · tailoring+intelligence · direct-submit · render · e2e
+scripts/              build, dev, icons, sample generators, load-resume (CLI ingest), tests
+                        fieldmap/fill · match invariants · tailoring+intelligence
+                        · direct-submit · render probes · e2e
 ```
 
 ## Rough edges / good next steps

@@ -169,8 +169,8 @@ export async function polishLetter({ job, profile, match, resume, settings }) {
 /* ------------------------------ screening answers -------------------------- */
 
 const QA_MAP = [
-  { rx: /why (do you want|are you interested|should we hire you)|why (this|{c})|interest/i, a: (ctx) => ctx.profile.freeTextAnswers?.whyCompanyTemplate.replace('{company}', ctx.job.company).replace('{hook}', companyHook(ctx.job) || 'the problem space you are hiring into').replace('{currentCompany}', ctx.profile.experience?.[0]?.company || 'my current team').replace('{transferable}', (ctx.profile.experience?.[0]?.bullets?.[0] || 'built production features').replace(/\.$/, '')).replace('{area}', ctx.job.title || 'this area') },
-  { rx: /salary|compensation|expectation/i, a: (ctx) => ctx.profile.freeTextAnswers?.salaryExpectation.replace('{expected}', ctx.job.salaryMin ? `${ctx.job.salaryCurrency || 'INR'} ${ctx.job.salaryMin.toLocaleString()}` : ctx.profile.targets?.minSalary ? `${ctx.profile.targets.salaryCurrency || 'INR'} ${ctx.profile.targets.minSalary.toLocaleString()}` : 'competitive with market') },
+  { rx: /why (do you want|are you interested|should we hire you)|why (this|{c})|interest/i, a: (ctx) => (ctx.profile.freeTextAnswers?.whyCompanyTemplate || 'I want to work on {company} because {hook}.').replace('{company}', ctx.job.company).replace('{hook}', companyHook(ctx.job) || 'the problem space you are hiring into').replace('{currentCompany}', ctx.profile.experience?.[0]?.company || 'my current team').replace('{transferable}', (ctx.profile.experience?.[0]?.bullets?.[0] || 'built production features').replace(/\.$/, '')).replace('{area}', ctx.job.title || 'this area') },
+  { rx: /salary|compensation|expectation/i, a: (ctx) => (ctx.profile.freeTextAnswers?.salaryExpectation || '{expected}').replace('{expected}', ctx.job.salaryMin ? `${ctx.job.salaryCurrency || 'INR'} ${ctx.job.salaryMin.toLocaleString()}` : ctx.profile.targets?.minSalary ? `${ctx.profile.targets.salaryCurrency || 'INR'} ${ctx.profile.targets.minSalary.toLocaleString()}` : 'competitive with market') },
   { rx: /notice period|how soon|start date|immediate/i, a: (ctx) => ctx.profile.freeTextAnswers?.noticePeriod || '4 weeks' },
   { rx: /authorized|sponsor|visa|legally/i, a: (ctx) => (ctx.profile.boolAnswers?.requireSponsorship ? ctx.profile.freeTextAnswers?.requireVisaSponsorshipNowOrFuture || 'No' : ctx.profile.freeTextAnswers?.areYouLegallyAble || 'Yes') },
   { rx: /relocat|work from (home|office)|hybrid|onsite/i, a: (ctx) => (ctx.job.remote ? 'This role is remote, which suits me. I am also open to occasional on-site visits.' : ctx.profile.openToRelocate ? `Yes — I'm based in ${ctx.profile.location?.city || 'India'} and open to relocation.` : `No relocation, but ${ctx.profile.location?.city || 'my city'} is a good commute for me.`) },
@@ -257,7 +257,7 @@ export function buildPrefill({ job, profile, resume, match, app }) {
       'education.endYear': profile.education?.[0]?.end || '',
       'education.gpa': profile.education?.[0]?.gpa || '',
       gpa: profile.education?.[0]?.gpa || '',
-      'salary.expected': profile.freeTextAnswers?.salaryExpectation?.replace('{expected}', (profile.targets?.minSalary || 0).toLocaleString()) || '',
+      'salary.expected': (profile.freeTextAnswers?.salaryExpectation || '').replace('{expected}', (profile.targets?.minSalary || 0).toLocaleString()) || '',
       'salary.current': profile.currentSalary ? String(profile.currentSalary) : '',
       'notice.period': profile.freeTextAnswers?.noticePeriod || '',
       'work.authorized': profile.boolAnswers?.authorizedToWork ? 'yes' : 'no',

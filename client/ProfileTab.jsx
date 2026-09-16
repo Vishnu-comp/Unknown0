@@ -181,9 +181,28 @@ export function ProfileTab({ profile, meta, setProfile, refresh, busy }) {
       <Panel title="Skills" sub="Levels weight the matcher (5 = expert). Core skills get a bonus in the match score and lead the cover letter.">
         <div className="job-bits">
           {(draft.skills || []).map((s) => (
-            <span key={s.name} className={`chip ${s.core ? 'good' : ''} rm`} title={`level ${s.level}/5 — click × to drop`} onClick={() => set('skills', (draft.skills || []).filter((x) => x.name !== s.name))}>
-              {s.name} <span className="dim">{'●'.repeat(s.level)}</span>
-              {s.core && <span style={{ color: 'var(--brand-2)' }}> ·core</span>}
+            <span
+              key={s.name}
+              className={`chip ${s.core ? 'good' : ''} rm`}
+              title={`level ${s.level}/5 · ${s.core ? 'core — carries extra weight in the score' : 'not core'} · click the star to toggle, × to drop`}
+            >
+              <button
+                className="chipbtn"
+                title="mark core (core skills weigh more in every match)"
+                onClick={() => set('skills', (draft.skills || []).map((x) => (x.name === s.name ? { ...x, core: !x.core } : x)))}
+              >
+                {s.core ? '★' : '☆'}
+              </button>
+              <span
+                style={{ cursor: 'pointer' }}
+                title="click to cycle the level"
+                onClick={() => set('skills', (draft.skills || []).map((x) => (x.name === s.name ? { ...x, level: (x.level % 5) + 1 } : x)))}
+              >
+                {s.name} <span className="dim">{'●'.repeat(s.level)}</span>
+              </span>
+              <button className="chipbtn" title="remove skill" onClick={() => set('skills', (draft.skills || []).filter((x) => x.name !== s.name))}>
+                ×
+              </button>
             </span>
           ))}
         </div>

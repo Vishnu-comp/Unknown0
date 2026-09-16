@@ -8,7 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "start": "node server/index.mjs",
-    "test": "npm run test:unit && npm run test:render && npm run test:features && npm run test:ats",
+    "test": "npm run test:unit && npm run test:match && npm run test:render && npm run test:features && npm run test:ats",
     "test:e2e": "node scripts/e2e.mjs --own-server",
     "test:all": "npm run test && npm run test:e2e",
     "sync:extension": "node scripts/build.mjs",
@@ -16,7 +16,8 @@
     "test:unit": "node scripts/fieldmap.test.mjs",
     "test:render": "esbuild scripts/render.test.mjs --bundle --format=cjs --jsx=automatic --loader:.js=jsx --loader:.mjs=jsx --platform=node --outfile=node_modules/.cache/render.test.cjs --log-level=error && node node_modules/.cache/render.test.cjs",
     "test:ats": "node scripts/ats.test.mjs",
-    "test:features": "node scripts/features.test.mjs"
+    "test:features": "node scripts/features.test.mjs",
+    "test:match": "node scripts/match.test.mjs"
   },
   "engines": {
     "node": ">=20"

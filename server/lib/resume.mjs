@@ -114,21 +114,57 @@ export function parseResume(text) {
   const phone = (clean.match(/(\+?\d[\d\s().\-]{7,}\d)/) || [])[0] || null;
   const linkedin = (clean.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+/i) || [])[0] || null;
   const github = (clean.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9\-_]+/i) || [])[0] || null;
-  const website = (clean.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9\-]+\.(?:dev|com|io|ai|me|co|design|app)(?:\/[A-Za-z0-9\-_./]*)?/i) || [])[0] || null;
+  const emailHost = (email || '@').split('@')[1] || '';
+  const siteHits = clean.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9\-]+\.(?:dev|com|io|ai|me|co|design|app|vercel\.app|netlify\.app|github\.io)(?:\/[A-Za-z0-9\-_.\/]*)?/gi) || [];
+  const website =
+    siteHits.find(
+      (u) =>
+        !u.toLowerCase().endsWith(emailHost) && !email.toLowerCase().includes(u.toLowerCase()) &&
+        !/^(?:gmail|yahoo|outlook|hotmail|proton(?:mail)?)\./i.test(u) &&
+        !/^(?:www\.)?(?:linkedin|github|gitlab)\.com/i.test(u) &&
+        (u.includes('/') || /\.(dev|design|app|ai|vercel\.app|netlify\.app|github\.io)$/i.test(u))
+    ) || null;
   const name = lines[0] && lines[0].length <= 48 && !/@|http/.test(lines[0]) ? titleGuess(lines[0]) : null;
 
-  const headline = lines.slice(0, 6).find((l) => /engineer|scientist|designer|analyst|manager|developer|architect|marketer|account/i.test(l)) || null;
+  /* A headline is a title line, not the summary paragraph. Prefer a short
+     matching line; if the only match is a sentence from the summary, keep its
+     first clause instead of pasting 400 characters into profile.linkedinHeadline
+     (which letters and the prefill pack both reuse). */
+  const ROLE_RX = /engineer|scientist|designer|analyst|manager|developer|architect|marketer|account|consultant|intern/i;
+  const dated = (l) => /\b(?:19|20)\d{2}\b\s*[—–-]|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:19|20)?\d{2}\s*[—–-]/i.test(l);
+  let headline =
+    lines
+      .slice(0, 6)
+      .map((l) => l.replace(/\s*\([^)]*\)\s*$/, '').trim())
+      .find((l) => ROLE_RX.test(l) && !dated(l) && l.length <= 110 && !/[.!?]$/.test(l)) ||
+    lines.slice(0, 6).find((l) => ROLE_RX.test(l) && !dated(l) && !l.includes('(') && l.length <= 160) ||
+    null;
+  if (!headline) {
+    const long = lines.slice(0, 8).find((l) => ROLE_RX.test(l) && l.length > 160);
+    if (long) {
+      const first = long.split(/(?<=[.!?])\s+/)[0].replace(/\bwith\b.*$/i, '').replace(/[,;:]\s*$/, '').trim();
+      headline = first.length > 6 && first.length <= 110 ? first : null;
+    }
+  }
 
   /* skills */
   const skillBlob = [sections.skills?.join(' '), sections.summary?.join(' '), clean].filter(Boolean).join(' · ');
   const phrases = extractPhrases(skillBlob);
-  const explicitLine = (sections.skills || []).join(', ');
+  /* skills lines are usually "Label: a, b, c" — the label is not a technology */
+  const explicitLine = (sections.skills || [])
+    .join(', ')
+    .replace(/\b([A-Z][A-Za-z &+#.\-/]{2,28}:)\s*/g, ' ');
   const chunkSkills = explicitLine
     .split(/[,•|;\/]/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 1 && s.length < 34)
+    .filter((s) => s.length > 1 && s.length < 34 && !/:/.test(s) && !/^(?:and|other|etc\.?)$/i.test(s))
     .slice(0, 40);
-  const skills = [...new Set([...phrases, ...chunkSkills.map((s) => s.toLowerCase())])].slice(0, 60);
+  const stackSkills = (sections.experience || [])
+    .flatMap((l) => (l.match(/\(([^)]{4,})\)/g) || []).map((x) => x.slice(1, -1)))
+    .flatMap((x) => x.split(/[,/]/))
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length > 1 && t.length < 26 && !/^(?:and|with|etc)\b/.test(t));
+  const skills = [...new Set([...phrases, ...stackSkills, ...chunkSkills.map((s) => s.toLowerCase())])].slice(0, 60);
 
   /* experience blocks: resume headers come in two shapes —
      (a) "Title, Company — Mar 2023 – Present"  on one line, or
@@ -156,7 +192,10 @@ export function parseResume(text) {
       if (looksLikeHeader) break;
       if (bl.length > 24) bullets.push(bl);
     }
-    const hasOwnDates = residual.length >= 6;
+    /* Bullets are captured either way. The old code skipped them when the date
+       range sat on the header line itself — which is exactly the shape most
+       one-line "Company — Role (stack) | Jan 2025 – Present" headers use, so
+       those resumes came back with roles and no achievements at all. */
     experience.push({
       title,
       company,
@@ -164,16 +203,59 @@ export function parseResume(text) {
       start: range.start_ym,
       end: range.present ? '' : range.end_ym,
       current: range.present,
-      bullets: (hasOwnDates ? [] : bullets).slice(0, 7),
+      bullets: bullets.slice(0, 8),
     });
   }
 
   /* education */
   const education = [];
+  /* Degree phrases. Two shapes cover nearly everything in the wild; first match
+     wins. Neither may cross a comma or a year, so dates never land in `degree`. */
+  const DEG_RXS = [
+    /\b(?:B|M)\.?(?:Tech|E|Sc|Com|CA|Arts|MBA)\b\s*(?:of|in|[,-])\s*[A-Z][A-Za-z0-9#.&/() +\-]{2,60}?\b(?=\s*(?:[,;]\s*\d{4}|\s*[—–-]\s*\d{4}|\s*\d{4}\s*[—–-]|\s*[|·•]|\s*[—–-]\s*[A-Z]|$))/,
+    /\b(?:Bachelor|Master|Post\s*Graduate|Ph\.?D)(?:\s+(?:of|in)\s+[A-Za-z0-9#.&/() +\-]{2,60})?/,
+    // abbreviated forms at the start of the line: "MCA — Christ University", "B.E. Information Science — RVCE"
+    /\b(?:[BM]\.(?:A|E|Sc|Tech|Com|CA)|MBA|PGP|PhD|BSc|MSc)(?:\s+(?:of|in|,|-)?\s*[A-Z][A-Za-z0-9#.&/() +\-]{1,40}\b)?/,
+  ];
+  const EDU_TAIL = /[|,·•]|\s[—–-]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*)?(?:19|20)\d{2}|\s\d{4}\s*$|\s\d{1,3}(?:\.\d+)?\s*%/;
   for (const line of sections.education || []) {
-    const m = line.match(/(B\.?Tech|B\.?E\.?|B\.?Sc|M\.?Tech|M\.?Sc|MBA|B\.?Com|Ph\.?D|Bachelor|Master)[^\n]{0,80}/i);
-    if (!m) continue;
-    education.push({ school: normalize(line.replace(m[0], '')).replace(/[|,·]\s*$/, '') || '—', degree: normalize(m[0]).slice(0, 90), start: (line.match(/(19|20)\d{2}/) || [])[0] || '', end: (line.match(new RegExp(`((19|20)\\d{2})(?!.*\\1)`, 'g')) || []).pop() || '', gpa: (line.match(/(?:GPA|CGPA)[:\s]*([\d.]+)\s*(?:\/\s*[\d.]+)?/i) || [])[1] || '', highlights: [] });
+    let dm = null;
+    for (const rx of DEG_RXS) {
+      const hit = line.match(rx);
+      if (hit) {
+        dm = hit;
+        break;
+      }
+    }
+    if (!dm) continue;
+    const degree = normalize(dm[0]).replace(/[|,·;]\s*$/, '').slice(0, 90);
+    /* school = everything before the degree phrase, minus the delimiter that
+       separated them; the tail after the degree is dates/marks, not the school */
+    let head = line.slice(0, dm.index).replace(/\s*[|,·:—–-]\s*$/, '').trim();
+    if (!head) {
+      const t = line.slice((dm.index || 0) + dm[0].length);
+      const cut = t.search(EDU_TAIL);
+      head = (cut > 0 ? t.slice(0, cut) : t)
+        .replace(/^\s*[,;:]\s*(?:[A-Za-z ]{2,40}?)(?=\s*[|,·•—–-]|\s*\d)/, (m) => m)
+        .replace(/^\s*[|,·:]\s*/, '')
+        .replace(/\s*[—–-]\s*$/, '')
+        .trim();
+      // if the fragment before the degree was empty, a "School — Degree" layout is
+      // already handled above; here we may have "Degree, School, dates" instead
+      if (head.length > 40) head = '';
+    }
+    const field = (line.slice((dm.index || 0) + dm[0].length).match(/^\s*[—–|,-]\s*([A-Z][A-Za-z0-9 .']{2,48})/) || [])[1] || '';
+    const years = line.match(/(?:19|20)\d{2}/g) || [];
+    const marks = (line.match(/\b\d{1,3}(?:\.\d+)?\s*%|(?:CGPA|GPA)\s*[:\s]?\s*\d(?:\.\d)?\s*(?:\/\s*10)?/i) || [])[0] || '';
+    education.push({
+      school: (head || field || '—').slice(0, 70),
+      degree,
+      start: years[0] || '',
+      end: years.length > 1 ? years[years.length - 1] : '',
+      gpa: (line.match(/(?:GPA|CGPA)\s*[:\s]\s*([\d.]+)\s*(?:\/\s*[\d.]+)?/i) || [])[1] || '',
+      marks: marks.replace(/\s+/g, ' ').trim(),
+      highlights: [],
+    });
   }
 
   /* quantified wins (used to make cover letters less generic) */
@@ -280,9 +362,27 @@ function splitHead(head) {
     }
   }
   // "Company (City)" leftovers
-  company = company.replace(/\s*\([^)]*\)\s*$/, '').replace(/[“”"].*$/, '').trim();
-  title = title.replace(/^[,\s—–-]+|[,\s—–-]+$/g, '').trim();
-  return { title: title.slice(0, 80), company: company.slice(0, 60), location: location.slice(0, 60) };
+  company = company.replace(/\s*\([^)]*\)\s*$/, '').replace(/[“”\"].*$/, '').trim();
+  title = title.replace(/^[,\s—–-]+|[,—–-\s]+$/g, '').trim();
+  /* A "(stack)" suffix on a role header belongs in skills, not in the title: the title is
+     reused verbatim in the resume header, the headline and ATS `title:` fields, where
+     "Software Development Engineer (NextJS, TypeScript, MySQL, Spring Boot, Tailwind" is
+     both ugly and truncated. Anything inside parentheses goes back onto the stack list. */
+  let stack = [];
+  const parenIn = (v, keepIfCity) => {
+    const m = String(v).match(/\(([^)]{4,})\)/);
+    if (!m) return v;
+    const inner = m[1].split(/[,/]/).map((t) => t.trim()).filter((t) => t.length > 1 && t.length < 26);
+    // a single short word inside parens on the company is a city, not a stack
+    if (keepIfCity && inner.length === 1) return v;
+    stack.push(...inner);
+    return v.replace(m[0], '').replace(/\s*\|?\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*)?(?:19|20)\d{2}\s*[—–-]\s*(?:Present|current|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*)?(?:19|20)?\d{0,4}/i, ' ').replace(/[,;|–—-]\s*$/, '').trim();
+  };
+  title = parenIn(title, false);
+  company = parenIn(company, true);
+  title = title.replace(/^[,\s—–-]+|[,—–-\s]+$/g, '').replace(/\s{2,}/g, ' ').trim();
+  stack = [...new Set(stack)];
+  return { title: title.slice(0, 80), company: company.slice(0, 60), location: location.slice(0, 60), stack };
 }
 
 /**
@@ -308,7 +408,15 @@ export function suggestProfilePatch(parsed, existing) {
     patch.phone = parsed.contact.phone.replace(/\s{2,}/g, ' ');
     changed.push('Phone');
   }
-  put('linkedin', parsed.contact.linkedin ? `https://linkedin.com${parsed.contact.linkedin.split('/in')[1] || ''}`.replace(/\/+$/, '') : null, 'LinkedIn');
+  put(
+    'linkedin',
+    parsed.contact.linkedin
+      ? /^https?:\/\//.test(parsed.contact.linkedin)
+        ? parsed.contact.linkedin
+        : `https://${parsed.contact.linkedin.replace(/^www\./, '')}`.replace(/\/+$/, '')
+      : null,
+    'LinkedIn'
+  );
   put('github', parsed.contact.github ? (parsed.contact.github.startsWith('http') ? parsed.contact.github : `https://${parsed.contact.github}`) : null, 'GitHub');
   put('portfolio', parsed.contact.website ? (parsed.contact.website.startsWith('http') ? parsed.contact.website : `https://${parsed.contact.website}`) : null, 'Portfolio');
   put('linkedinHeadline', parsed.headline, 'Headline');
