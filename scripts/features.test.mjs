@@ -146,6 +146,25 @@ ok(!/[ \t]{2,}/.test(plain), 'no double spaces (some parsers choke on them)');
 ok(plain.includes('Built and shipped a self-serve billing console'), 'content preserved through the conversion');
 ok(fs.writeFileSync(path.join(tmp, 'r.txt'), plain, 'utf8') === undefined, 'tailored text is writable as a .txt resume');
 
+console.log('\n· a letter never misattributes another role\'s work');
+{
+  const { buildLetter } = await import('../server/lib/letters.mjs');
+  const twoRoles = structuredClone(profile);
+  twoRoles.experience[0].bullets = ['Built and shipped a self-serve billing console (React + Node + Postgres) used by 12k merchants, cutting support tickets 34%.'];
+  twoRoles.experience[1].bullets = ['Rust tokio sidecar prototype', 'Rust async runtime benchmark harness with 40% fewer context switches.'];
+  const rustJob = { id: 'rust', company: 'Acme', title: 'Backend Engineer', description: 'Rust, tokio, async runtimes. Kubernetes and Terraform required.', url: 'https://x/2' };
+  const letter = buildLetter({ job: rustJob, profile: twoRoles, match: scoreJob(rustJob, twoRoles, null), resume }).letter;
+  const fromOldRole = letter.includes('Rust async runtime benchmark harness');
+  const attributesToRole1 = /At \n?/.test(letter) || letter.includes('Nimbus Labs');
+  ok(!fromOldRole || letter.includes('FinEdge'), 'either the bullet is not used, or it is credited to the role it came from');
+  ok(!letter.includes('At Nimbus Labs (Software Engineer II)\n  • Rust'), 'no "current role" heading sitting over an older role\'s bullet');
+  ok(letter.includes('Nimbus Labs') && letter.includes('billing console'), 'when the current role has bullets, they are what gets quoted');
+  ok(/— 2 yrs —|— \d(\.\d)? yrs —/.test(tailorResume({ job: rustJob, profile: twoRoles, resume, match: scoreJob(rustJob, twoRoles, null) }).text.split('\n')[4]) || /yrs/.test(tailorResume({ job: rustJob, profile: twoRoles, resume, match: null }).text), 'headline keeps its year segment after cleanup');
+  const head = tailorResume({ job: { id: 'j', company: 'Z', title: 'Software Engineer  (Full Stack)', description: 'React', url: 'u' }, profile: twoRoles, resume, match: null }).text.split('\n')[4];
+  ok(!/[ ]{2,}\(|\(\s+/.test(head) && head.includes('Engineer (Full Stack)'), `one clean space before the parenthesis, nothing doubled ("${head}")`);
+  void attributesToRole1;
+}
+
 /* -------------------------------- intelligence -------------------------------- */
 
 console.log('\n· posting intelligence');

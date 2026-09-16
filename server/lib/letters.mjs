@@ -9,6 +9,12 @@ import { normalize, truncate, extractPhrases, sentences } from './text.mjs';
 
 /* ------------------------------- template path ----------------------------- */
 
+/**
+ * Pick the bullets that answer THIS posting. Only from the role we say they come
+ * from: an earlier version pooled current + previous roles and attributed the
+ * result to the current one, which put an internship line under a full-time
+ * heading — exactly the kind of quiet overclaim a hiring manager notices.
+ */
 function pickRelevant(bullets, jobTerms) {
   const scored = (bullets || []).map((b) => {
     const low = b.toLowerCase();
@@ -40,10 +46,8 @@ export function buildLetter({ job, profile, match, resume, tone = 'confident' })
 
   const role1 = profile.experience?.[0];
   const role2 = profile.experience?.[1];
-  const bullets = pickRelevant(
-    [...(role1?.bullets || []), ...(role2?.bullets || [])],
-    jobTerms.length ? jobTerms : matched
-  );
+  const primaryPool = (role1?.bullets || []).length ? role1 : role2;
+  const bullets = pickRelevant(primaryPool?.bullets, jobTerms.length ? jobTerms : matched);
   const wins = (resume?.wins || []).filter((w) => w.length > 40).slice(0, 1);
   const years = match?.yearsOfExperience ?? resume?.yearsOfExperience ?? null;
   const domain = (profile.targets?.fields || [])[0] || profile.primaryField || 'engineering';
@@ -59,7 +63,7 @@ export function buildLetter({ job, profile, match, resume, tone = 'confident' })
     : `The description reads like work where ownership is expected rather than ticket throughput, which matches how I've operated so far.`;
 
   const proof = bullets.length
-    ? `At ${role1?.company || 'my current company'}${role1?.title ? ` (${role1.title})` : ''}, the work closest to yours:\n${bullets.map((b) => `  • ${b}.`).join('\n')}${wins.length ? `\n\nOutside of that: ${truncate(wins[0], 200)}.` : ''}`
+    ? `At ${primaryPool?.company || 'my current company'}${primaryPool?.title ? ` (${primaryPool.title})` : ''}, the work closest to yours:\n${bullets.map((b) => `  • ${b}.`).join('\n')}${wins.length ? `\n\nOutside of that: ${truncate(wins[0], 200)}.` : ''}`
     : `I've spent the last few years${years ? ` (${years} yrs)` : ''} building ${matched.slice(0, 4).join(', ') || 'product software'} end to end — design docs through deploy to on-call — and I care about measurable outcomes over activity.`;
 
   const gapLine = (match?.missingSkills || []).length && match.score < 80

@@ -62,7 +62,12 @@ function rankSkills(skills, sig) {
 }
 
 function buildHeadline(profile, job, sig, match) {
-  const role = normalize(job.title).replace(/\b(sr\.?|senior|staff|lead|principal|ii|iii|iv)\b/gi, '').trim();
+  const role = normalize(job.title)
+    .replace(/\b(sr\.?|senior|staff|lead|principal|ii|iii|iv)\b/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,;])/g, '$1')
+    .replace(/\s+([()])/g, ' $1').replace(/\s{2,}/g, ' ')
+    .trim();
   const mine = profile.linkedinHeadline || `${(profile.experience?.[0]?.title || 'Software Engineer').trim()}`;
   const leadSkills = rankSkills(profile.skills, sig)
     .filter((s) => s._score > 3)
