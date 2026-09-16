@@ -1,0 +1,45 @@
+Alexander "Alex" Kumar
+Bengaluru, Karnataka, India · +91 98100 45231 · alex.kumar@gmail.com
+linkedin.com/in/alexkumar-dev · github.com/alexkumar-dev · alexkumar.dev
+
+PROFESSIONAL SUMMARY
+Software engineer with 4 years of experience building product and platform
+systems in React, TypeScript and Node.js on AWS. Comfortable owning a service
+from design doc to on-call. Two internal tools I built are used company-wide.
+
+WORK EXPERIENCE
+
+Nimbus Labs — Software Engineer II, Bengaluru, India
+March 2023 – Present
+• Built a self-serve billing console (React, TypeScript, Node.js, PostgreSQL) used by 12,000 merchants; reduced billing support tickets by 34% in two quarters.
+• Migrated 40+ REST endpoints to typed OpenAPI contracts with generated clients, cutting frontend/backend integration bugs from 9 to 1 per quarter.
+• Led OpenTelemetry + Grafana rollout across 6 services; p95 error-rate alert noise down 60%, MTTR from 42 min to 11 min.
+• Mentored 3 junior engineers; ran weekly design-review office hours.
+
+FinEdge — Software Engineer Intern → SDE I, Gurugram, India
+July 2021 – February 2023
+• Shipped a KYC document ingestion pipeline processing 80,000 documents/day using Node.js, S3 and Textract; p99 latency 1.9 s.
+• Wrote a Playwright + Jest integration harness that halved release QA time (from 6 h to under 3 h per release).
+• Reduced monthly AWS spend 18% ($7.2k/mo) by moving batch jobs from EC2 to Lambda with SQS dead-letter handling.
+
+PROJECTS
+ledger-ui — open-source React component library for financial tables; 480 GitHub stars, 9k weekly npm downloads.
+querylab — SQL playground with Docker, Redis caching and row-level security demo; used by 2 university courses.
+
+EDUCATION
+Vellore Institute of Technology — B.Tech, Computer Science and Engineering, 2017 – 2021, CGPA 8.4/10
+Relevant: Distributed Systems, Databases, Algorithms, Statistics (minor)
+
+SKILLS
+Languages: TypeScript, JavaScript, Python, SQL, Go (learning)
+Frontend: React, Next.js, Redux Toolkit, Tailwind, Jest, Playwright, Storybook
+Backend: Node.js, Express, Fastify, GraphQL, REST/OpenAPI, gRPC basics
+Data: PostgreSQL, MySQL, Redis, MongoDB, Kafka, Airflow (light), dbt (light)
+Infra: AWS (ECS, EC2, Lambda, S3, RDS, CloudFront), Docker, Kubernetes (basic), Terraform (basic), GitHub Actions, ArgoCD
+Practices: TDD, trunk-based development, observability, incident response, design docs, A/B testing
+
+CERTIFICATIONS
+AWS Certified Developer – Associate (2024) · Google Professional Cloud Developer (2025)
+
+AWARDS
+Nimbus Labs "Ship It" award 2024 · VIT ACM chapter lead 2019-2021

@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: dark; }
+      body { width: 372px; margin: 0; background: #0d1317; color: #e6eef2; font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+      * { box-sizing: border-box; }
+      header { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid #223038; background: #101820; }
+      .mark { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(140deg, #10b981, #0ea5e9); color: #04120e; font-weight: 900; display: grid; place-items: center; font-size: 12px; }
+      b.t { letter-spacing: -0.01em; }
+      .sp { flex: 1; }
+      main { padding: 12px 13px 14px; display: grid; gap: 11px; }
+      .card { background: #131a20; border: 1px solid #223038; border-radius: 11px; padding: 11px 12px; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      button { appearance: none; border: 1px solid #2d3f4a; background: #172027; color: #e6eef2; padding: 7px 11px; border-radius: 9px; cursor: pointer; font-weight: 550; font-size: 12.5px; }
+      button:hover { background: #1d2831; }
+      button.big { background: #10b981; color: #04120e; border-color: transparent; font-weight: 700; padding: 9px 13px; width: 100%; font-size: 13.5px; }
+      button.big:hover { background: #34d399; }
+      button.ghost { background: transparent; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      textarea { width: 100%; min-height: 74px; background: #0b1013; border: 1px solid #223038; color: #e6eef2; border-radius: 8px; padding: 8px; font: 11.5px ui-monospace, Menlo, monospace; resize: vertical; }
+      input[type='file'] { width: 100%; font-size: 11.5px; color: #8ea3ae; }
+      .kv { display: grid; grid-template-columns: 92px 1fr; gap: 3px 8px; font-size: 12px; }
+      .kv > div:nth-child(odd) { color: #63757f; }
+      .score { font-weight: 800; color: #34d399; font-size: 20px; letter-spacing: -0.03em; }
+      .log { max-height: 150px; overflow: auto; font: 11px ui-monospace, Menlo, monospace; color: #8ea3ae; }
+      .log div { border-bottom: 1px solid rgba(34,48,56,.7); padding: 3px 0; }
+      .tag { font-size: 11px; border: 1px solid #2d3f4a; border-radius: 999px; padding: 1px 7px; color: #8ea3ae; }
+      .warn { color: #fbbf24; font-size: 11.5px; }
+      .ok { color: #6ee7b7; }
+      .muted { color: #63757f; }
+      .empty { text-align: center; color: #63757f; padding: 12px 4px; }
+      .tabs { display: flex; gap: 4px; }
+      .tabs button { padding: 4px 9px; font-size: 11.5px; border-radius: 7px; }
+      .tabs button.on { background: #10b981; color: #04120e; border-color: transparent; font-weight: 700; }
+      label.chk { display: flex; gap: 7px; align-items: center; font-size: 12px; color: #8ea3ae; }
+      h4 { margin: 0 0 7px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: #63757f; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="mark">A</span>
+      <b class="t">ApplyFlow prefiller</b>
+      <span class="sp"></span>
+      <span class="tag" id="host">—</span>
+    </header>
+    <main>
+      <div class="tabs">
+        <button data-t="apply" class="on">Apply</button>
+        <button data-t="pack">Import pack</button>
+        <button data-t="log">Log</button>
+        <button data-t="about">About</button>
+      </div>
+
+      <section id="tab-apply">
+        <div class="card" id="pack-summary"><div class="empty">no pack loaded — open “Import pack”</div></div>
+        <div class="card">
+          <button class="big" id="fill">Fill this page</button>
+          <div class="row" style="margin-top: 8px">
+            <button id="autofill">Fill empty only</button>
+            <button id="survey">Detect fields</button>
+            <button class="ghost" id="pasteFocused">Letter → focused</button>
+            <button class="ghost" id="clear">Hide overlay</button>
+          </div>
+          <div class="row" style="margin-top: 9px">
+            <label class="chk"><input type="checkbox" id="autoOnOpen" /> auto-fill detected application forms when they load</label>
+          </div>
+          <div class="row" style="margin-top: 9px">
+            <span class="warn">nothing is ever submitted — that click stays yours</span>
+          </div>
+        </div>
+        <div class="card">
+          <h4>files you'll need to pick manually</h4>
+          <div class="row">
+            <button id="dlLetter">download cover letter.txt</button>
+            <button id="copyLetter">copy letter</button>
+          </div>
+          <div class="muted" style="font-size: 11.5px; margin-top: 6px">
+            ATS file pickers can't be scripted by an extension (browser security). Download the letter here, then select it — and your resume — in the
+            form's upload inputs.
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-pack" hidden>
+        <div class="card">
+          <h4>paste pack json</h4>
+          <textarea id="paste" placeholder='{"kind":"applyflow.prefill","payload":{…}}  — copied from ApplyFlow → Applications → “copy extension payload”'></textarea>
+          <div class="row" style="margin-top: 7px">
+            <button id="loadPaste">load pasted</button>
+            <span class="muted" id="paste-status"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h4>or choose the exported file</h4>
+          <input type="file" id="file" accept="application/json,.json" />
+          <div class="muted" style="font-size: 11.5px; margin-top: 6px">Works with a single pack (/api/apps/:id/prefill) or the batch export (applyflow-prefill.json) — batch lets you pick which job.</div>
+        </div>
+        <div class="card" id="batch-box" hidden>
+          <h4>jobs in this batch</h4>
+          <div id="batch-list" class="log" style="max-height: 190px"></div>
+        </div>
+      </section>
+
+      <section id="tab-log" hidden>
+        <div class="card"><h4>what the extension did</h4><div id="log" class="log"></div></div>
+      </section>
+
+      <section id="tab-about" hidden>
+        <div class="card">
+          <h4>why it works this way</h4>
+          <div class="muted" style="font-size: 12px">
+            Job boards explicitly forbid scripted submissions and enforce it with captchas + fingerprinting, and any server-side “auto apply” would need your
+            password. So this extension automates the <i>typing</i> inside your own session and stops before <i>sending</i>. Same net time saving, no banned
+            account, no leaked credentials.
+          </div>
+          <h4 style="margin-top: 11px">selector coverage</h4>
+          <div class="muted" style="font-size: 12px">
+            Generic label/name/placeholder heuristics cover most Greenhouse, Lever, Ashby and Workable forms. Workday and iCIMS use obfuscated ids —
+            “Detect fields” shows what we mapped; anything unmapped you fill by hand, and you can pin it with <code>data-qa-field</code> if you maintain a
+            custom board.
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

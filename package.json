@@ -1,0 +1,37 @@
+{
+  "name": "applyflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ApplyFlow \u2014 profile + resume \u2192 job matching \u2192 auto-drafted applications with a browser extension that fills the forms for you.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "node server/index.mjs",
+    "test": "npm run test:unit && npm run test:render && npm run test:features && npm run test:ats",
+    "test:e2e": "node scripts/e2e.mjs --own-server",
+    "test:all": "npm run test && npm run test:e2e",
+    "sync:extension": "node scripts/build.mjs",
+    "icons": "node scripts/icons.mjs",
+    "test:unit": "node scripts/fieldmap.test.mjs",
+    "test:render": "esbuild scripts/render.test.mjs --bundle --format=cjs --jsx=automatic --loader:.js=jsx --loader:.mjs=jsx --platform=node --outfile=node_modules/.cache/render.test.cjs --log-level=error && node node_modules/.cache/render.test.cjs",
+    "test:ats": "node scripts/ats.test.mjs",
+    "test:features": "node scripts/features.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "esbuild": "^0.28.2",
+    "express": "^5.2.1",
+    "multer": "^2.4.0",
+    "pdfjs-dist": "^6.3.289",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "pngjs": "^7.0.0"
+  }
+}
