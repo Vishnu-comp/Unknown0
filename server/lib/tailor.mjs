@@ -108,6 +108,24 @@ export function tailorResume({ job, profile, resume, match }) {
 
   const wins = (resume?.wins || []).map((w) => ({ b: w, ...scoreBullet(w, sig) })).filter((x) => x.score >= 3).sort((a, z) => z.score - a.score).slice(0, 3);
 
+  /* Skills the posting matched are listed with the user's own capitalisation
+     when they already have the skill — "react" from the posting, "React.js" as
+     it appears on their resume. "in their words" describes which skills were
+     picked, not how they are spelled; ATS keyword matching is case-insensitive,
+     and a resume that reads "sql · jenkins" looks like a list dump. */
+  const profileCase = new Map((profile.skills || []).map((sk) => [String(sk.name).toLowerCase(), String(sk.name)]));
+  const requestedNames = requested.map((r) => {
+    const raw = String(r.name);
+    const exact = profileCase.get(raw);
+    if (exact) return exact;
+    const stem = raw.replace(/[.,]?(js|py|ts)$/i, '').trim();
+    if (stem.length > 2) {
+      const byStem = [...profileCase.entries()].find(([k]) => k === stem || k.startsWith(stem + ' ') || k.startsWith(stem + '.'));
+      if (byStem) return byStem[1];
+    }
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  });
+
   const line = '─'.repeat(64);
   const contact = [
     [profile.email, profile.phone].filter(Boolean).join(' · '),
@@ -125,7 +143,7 @@ export function tailorResume({ job, profile, resume, match }) {
     line,
     '',
     `RELEVANT SKILLS · ${requested.length} of the stack in this posting, in their words`,
-    wrap(requested.map((s) => s.name).join(' · ') || rankedSkills.slice(0, 8).map((s) => s.name).join(' · '), 72),
+    wrap([...new Set(requestedNames)].join(' · ') || rankedSkills.slice(0, 8).map((s) => s.name).join(' · '), 72),
     '',
     'EXPERIENCE',
   ];
@@ -147,7 +165,13 @@ export function tailorResume({ job, profile, resume, match }) {
     out.push('');
     out.push('EDUCATION');
     for (const ed of resume?.education?.length ? resume.education : profile.education) {
-      out.push(`  ${ed.school || ''}${ed.degree ? ` — ${ed.degree}` : ''}${ed.end ? ` (${ed.end})` : ''}${ed.gpa ? ` · ${ed.gpa}` : ''}`);
+      // a range, not just the end year: "MCA (2025)" hides that it was a 2-year
+      // programme, and marks/percentage are the one thing Indian resumes are read for
+      const span = ed.start && ed.end && ed.start !== ed.end ? `${ed.start} – ${ed.end}` : ed.end || ed.start || '';
+      const score = ed.gpa ? `GPA ${ed.gpa}` : ed.marks || '';
+      out.push(
+        `  ${ed.school || ''}${ed.degree ? ` — ${ed.degree}` : ''}${span ? ` (${span})` : ''}${score ? ` · ${score}` : ''}${(ed.highlights || []).length ? ` · ${ed.highlights.join('; ')}` : ''}`
+      );
     }
   }
 

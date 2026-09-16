@@ -147,6 +147,47 @@ export function parseResume(text) {
     }
   }
 
+  /* --- display case for skills ---------------------------------------------
+     Everything below is lowercased for matching, which is right for the matcher
+     and wrong for a resume: "nextjs", "reactjs", "ci" (because "CI/CD" was split
+     on the slash) and "css" all read as a list dump. This table only fixes
+     spelling — it never adds a skill the document did not state. */
+  const SKILL_DISPLAY = {
+    nextjs: 'Next.js', 'next js': 'Next.js', reactjs: 'React.js', nodejs: 'Node.js',
+    expressjs: 'Express.js', 'react js': 'React.js', 'node js': 'Node.js',
+    'ci/cd': 'CI/CD', cicd: 'CI/CD', ci: 'CI/CD', cd: 'CI/CD',
+    'aws ec2': 'AWS EC2', jdbc: 'JDBC', jenkins: 'Jenkins', github: 'GitHub',
+    gitlab: 'GitLab', tailwindcss: 'Tailwind CSS', 'tailwind css': 'Tailwind CSS',
+    thymeleaf: 'Thymeleaf', mockito: 'Mockito', junit: 'JUnit', maven: 'Maven',
+    postman: 'Postman', websockets: 'WebSockets', 'rest apis': 'REST APIs', rest: 'REST APIs',
+    'api integrations': 'API integrations', 'payment integration': 'Payment integration',
+    'system design': 'System design', 'data structures': 'Data structures',
+    'distributed systems': 'Distributed systems', 'functional programming': 'Functional programming',
+    'unit testing': 'Unit testing', 'problem solving': 'Problem solving',
+    'soft skills': 'Soft skills', communication: 'Communication',
+    'vs code': 'VS Code', unix: 'Unix', linux: 'Linux', 'core java': 'Core Java',
+    springboot: 'Spring Boot', 'spring boot': 'Spring Boot', hibernate: 'Hibernate',
+    microservices: 'Microservices', authentication: 'Authentication', upi: 'UPI',
+    b2b: 'B2B', tdd: 'TDD', dsa: 'DSA', oop: 'OOP', ddd: 'DDD',
+    css: 'CSS', html: 'HTML', xml: 'XML', json: 'JSON', sql: 'SQL', nosql: 'NoSQL',
+    js: 'JavaScript', ts: 'TypeScript', java: 'Java', python: 'Python', go: 'Go',
+    docker: 'Docker', kubernetes: 'Kubernetes', aws: 'AWS', postgresql: 'PostgreSQL',
+    mysql: 'MySQL', mongodb: 'MongoDB', redis: 'Redis', kafka: 'Kafka',
+    typescript: 'TypeScript', javascript: 'JavaScript', react: 'React.js',
+    redux: 'Redux', git: 'Git', rabbitmq: 'RabbitMQ', ec2: 'Amazon EC2', ecs: 'Amazon ECS',
+    rds: 'Amazon RDS', s3: 'S3', grafana: 'Grafana', terraform: 'Terraform', airflow: 'Airflow',
+    dbt: 'dbt', opentelemetry: 'OpenTelemetry', cloudfront: 'Amazon CloudFront',
+    'github actions': 'GitHub Actions', 'a/b testing': 'A/B testing', grpc: 'gRPC',
+    storybook: 'Storybook', fastify: 'Fastify', express: 'Express.js', tailwind: 'Tailwind CSS',
+    'trunk-based development': 'Trunk-based development', algorithms: 'Algorithms',
+  };
+  const displaySkill = (raw) => {
+    const k = String(raw).trim().toLowerCase();
+    if (SKILL_DISPLAY[k]) return SKILL_DISPLAY[k];
+    if (/[A-Z]/.test(String(raw))) return String(raw).trim();
+    return String(raw).trim().replace(/\b(react|node|express|vue|angular|spring|hibernate|bootstrap)\b/gi, (w) => w[0].toUpperCase() + w.slice(1));
+  };
+
   /* skills */
   const skillBlob = [sections.skills?.join(' '), sections.summary?.join(' '), clean].filter(Boolean).join(' · ');
   const phrases = extractPhrases(skillBlob);
@@ -161,10 +202,10 @@ export function parseResume(text) {
     .slice(0, 40);
   const stackSkills = (sections.experience || [])
     .flatMap((l) => (l.match(/\(([^)]{4,})\)/g) || []).map((x) => x.slice(1, -1)))
-    .flatMap((x) => x.split(/[,/]/))
+    .flatMap((x) => x.split(/,/))
     .map((t) => t.trim().toLowerCase())
     .filter((t) => t.length > 1 && t.length < 26 && !/^(?:and|with|etc)\b/.test(t));
-  const skills = [...new Set([...phrases, ...stackSkills, ...chunkSkills.map((s) => s.toLowerCase())])].slice(0, 60);
+  const skills = dedupeSkills([...phrases, ...stackSkills, ...chunkSkills].map(displaySkill)).slice(0, 60);
 
   /* experience blocks: resume headers come in two shapes —
      (a) "Title, Company — Mar 2023 – Present"  on one line, or
@@ -279,6 +320,45 @@ export function parseResume(text) {
     yearsOfExperience: yearsMatch ? Number(yearsMatch[1]) : null,
     parsedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * A skill list is the one place a resume is read token by token, so it must not
+ * contain "C++" and "c++" twice, a salary figure, or someone's self-rating.
+ * Names are display-cased; identity is compared on a normalised key.
+ */
+function dedupeSkills(list) {
+  const keyOf = (n) =>
+    String(n)
+      .toLowerCase()
+      .replace(/\s*\((?:learning|basics?|light|exposure|familiar|beginner|intermediate|advanced|work in progress)[^)]*\)/i, '')
+      .replace(/[.\-_\s]+/g, '')
+      // "AWS EC2" and "Amazon EC2" and "EC2" are one skill, not three
+      .replace(/^(aws|amazon|google|gcp|azure)(?=[a-z0-9]{2,})/,'')
+      .trim();
+  const seen = new Map();
+  for (const raw of list) {
+    const name = String(raw).trim();
+    if (!name || name.length < 2 || name.length > 34) continue;
+    if (/^[$€£₹]\s?\d|\b\d+(\.\d+)?\s*(k|K|lakh|crore|cr|%)\/(mo|yr|month|year)s?\b|^\$?\d+k\b/.test(name)) continue; // money, not a skill
+    if (/^(aws|amazon|gcp|azure)$/.test(name.toLowerCase())) { /* bare cloud name is a real skill, keep it */ }
+    if (/^(product|team|ownership|fast learner|self[- ]starter|detail[- ]oriented)$/i.test(name)) continue;
+    if (/\b(learning|basics?|light|exposure|familiar)\b/.test(name) && !/\((?:[^)]*)\)/.test(name)) {
+      // a bare self-rating with no technology attached is not a skill
+      continue;
+    }
+    const key = keyOf(name);
+    if (!key) continue;
+    const prev = seen.get(key);
+    // prefer the spelling that is not an all-lowercase duplicate of a titled one
+    const better = !prev
+      || (/[a-z]/.test(prev) && /^[A-Z]/.test(name) && prev.toLowerCase() === name.toLowerCase())
+      || (/^(AWS|Amazon|GCP|Azure) /.test(name) && !/^(AWS|Amazon|GCP|Azure) /.test(prev));
+    if (better) {
+      seen.set(key, name);
+    }
+  }
+  return [...seen.values()];
 }
 
 function titleGuess(s) {

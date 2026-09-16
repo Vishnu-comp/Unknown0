@@ -165,6 +165,25 @@ console.log('\n· a letter never misattributes another role\'s work');
   void attributesToRole1;
 }
 
+console.log('\n· resume parsing hygiene (skills, contact, titles)');
+{
+  const { parseResume } = await import('../server/lib/resume.mjs');
+  const txt = fs.readFileSync(new URL('../data/samples/vishnu-resume.txt', import.meta.url), 'utf8');
+  const sum = (parseResume(txt).summary || parseResume(txt));
+  const low = sum.skills.map((x) => x.toLowerCase());
+  ok(new Set(low).size === low.length, 'no duplicate skills after case normalisation', low.filter((x, i) => low.indexOf(x) !== i).join(','));
+  const money = sum.skills.filter((x) => /^[$€£₹]|^\d|\d%$|\/(mo|yr)\b|^\d+k\b/i.test(x));
+  ok(money.length === 0, 'no money or metric strings masquerading as a skill', money.join(',') || 'none');
+  const awsish = sum.skills.filter((x) => /^(AWS )?EC2$/i.test(x));
+  ok(awsish.length <= 1, 'an alias and its AWS-prefixed twin collapse to one entry', awsish.join(','));
+  ok(sum.skills.includes('Next.js') && sum.skills.includes('CI/CD') && sum.skills.includes('RabbitMQ'), 'folded spellings get real names');
+  ok(!sum.skills.some((x) => /:$/.test(x) || /^(programming languages|tools|soft skills)/i.test(x)), 'section labels never become skills');
+  ok(sum.experience.every((e) => !/\(/.test(e.title)), 'role titles keep no "(stack)" tail');
+  ok(sum.contact.website.includes('vercel.app') && !sum.contact.website.includes('gmail'), 'portfolio site is the portfolio, not the email host', sum.contact.website);
+  ok(sum.contact.linkedin === 'linkedin.com/in/vishnu-nair-tech', 'LinkedIn path is not rewritten into a prose slug', sum.contact.linkedin);
+  ok(sum.yearsOfExperience >= 2 && sum.yearsOfExperience <= 3, `years read from the date ranges (${sum.yearsOfExperience})`);
+}
+
 /* -------------------------------- intelligence -------------------------------- */
 
 console.log('\n· posting intelligence');
