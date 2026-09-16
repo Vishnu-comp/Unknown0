@@ -51,6 +51,19 @@ const prof = (core, over = {}) => ({
   ...over,
 });
 
+console.log('\n· runtime guard agrees with what the dependencies actually declare');
+{
+  const { nodeTooOld, nodeVersionAdvice } = await import('../server/lib/runtime.mjs');
+  ok(nodeTooOld('18.20.8') === true, 'the reported failure case (Node 18) is detected');
+  ok(nodeTooOld('20.11.1') === true, 'and the engines field we used to claim (>=20) would NOT have saved anyone');
+  ok(nodeTooOld('22.12.9') === true && nodeTooOld('22.13.0') === false, 'boundary is 22.13, where pdfjs-dist starts being satisfied');
+  ok(nodeTooOld('24.4.1') === false && nodeTooOld('v22.16.0') === false, 'newer majors and a v-prefixed string are fine');
+  const advice = nodeVersionAdvice('18.20.8');
+  ok(/pdfjs-dist|PDF/.test(advice) && /jsdom/.test(advice), 'the message names the two things that break, not a vague version complaint');
+  ok(/brew install node@22|nvm install/.test(advice), 'and gives copy-pasteable fixes');
+  ok(/\.txt|\.docx|paste/i.test(advice), 'plus the workaround for someone who cannot upgrade right now');
+}
+
 console.log('\n· the `core` skill flag actually does something (and stays modest)');
 const withCore = scoreJob(job, prof(true), null);
 const noCore = scoreJob(job, prof(false), null);

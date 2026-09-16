@@ -13,7 +13,9 @@
  * so anything it prints you can also see and edit in the browser.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { nodeTooOld, nodeVersionAdvice } from '../server/lib/runtime.mjs';
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -22,14 +24,69 @@ const args = Object.fromEntries(
   })
 );
 const BASE = args.base || process.env.APPLYFLOW_URL || 'http://127.0.0.1:3000';
-const RESUME = args.resume || path.join('data', 'samples', 'sample-resume.txt');
+
+/* "~/Downloads/resume.pdf" reaches us literally: a tilde is expanded by the
+   shell only when it starts a word unquoted, and here it starts a flag value.
+   Do the expansion ourselves instead of throwing ENOENT at the reader. */
+function expandHome(p) {
+  const raw = String(p).trim().replace(/^["']|["']$/g, '');
+  if (raw === '~') return os.homedir();
+  if (raw.startsWith('~/') || raw.startsWith('~\\')) return path.join(os.homedir(), raw.slice(2));
+  const userHome = raw.match(/^~([^/\\"']+)/);
+  if (userHome) {
+    try { return path.join(os.homedir().replace(/[^/]*$/, userHome[1]), raw.slice(userHome[0].length)); } catch { /* unknown user */ }
+  }
+  return raw;
+}
+
+function resolveResume(arg) {
+  const p = expandHome(arg);
+  if (fs.existsSync(p)) {
+    if (fs.statSync(p).isDirectory()) {
+      die(`--resume points at a directory (${p}). Here are the resumes inside it:\n    ${listResumes(p)}`);
+    }
+    return p;
+  }
+  const dir = path.dirname(p) || '.';
+  const hint = fs.existsSync(dir)
+    ? `Files there that look like resumes:\n    ${listResumes(dir) || '(none — check the name)'}\n\n  Tip: the shell does not expand "~" inside a flag value. Use\n    --resume=$HOME/Downloads/<file>   or drag the file into the terminal to paste its full path.`
+    : `${dir} does not exist either. Run ls to confirm the path, or use --resume=$HOME/Downloads/<file>.`;
+  die(`no such file: ${p}\n\n  ${hint}`);
+}
+
+const listResumes = (dir) => {
+  try {
+    const hits = fs
+      .readdirSync(dir)
+      .filter((f) => /\.(pdf|docx?|txt|md|rtf)$/i.test(f))
+      .slice(0, 8);
+    return hits.length ? hits.join('\n    ') : '(none — check the name)';
+  } catch {
+    return '(unlistable)';
+  }
+};
+
+function die(msg) {
+  console.error(`\n  ✗ ${msg}\n`);
+  process.exit(1);
+}
+
+if (nodeTooOld() && !/\.(txt|md|markdown|rtf)$/i.test(String(args.resume || ''))) die(nodeVersionAdvice());
+if (nodeTooOld()) console.log(`  ⚠ ${nodeVersionAdvice()}\n`);
+
+const RESUME = resolveResume(args.resume || path.join('data', 'samples', 'sample-resume.txt'));
 
 const { parseResume, extractText, suggestProfilePatch } = await import('../server/lib/resume.mjs');
 
 const buf = fs.readFileSync(RESUME);
 const ext = path.extname(RESUME).slice(1).toLowerCase();
 const mime = { pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }[ext] || 'text/plain';
-const text = ext === 'txt' || ext === 'md' ? buf.toString('utf8') : await extractText(buf, mime, RESUME);
+let text;
+try {
+  text = ext === 'txt' || ext === 'md' ? buf.toString('utf8') : await extractText(buf, mime, RESUME);
+} catch (e) {
+  die(`${e?.message || e}${e?.status >= 500 ? '' : '\n\n  (this ran in-process, so it is the same code the web UI uses — if it fails here it fails there)'}`);
+}
 const parsed = parseResume(text);
 
 if (!parsed.name) console.log('· note: no name line detected — set fullName on the Profile tab');

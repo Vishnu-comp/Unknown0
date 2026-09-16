@@ -5,6 +5,7 @@
  */
 import AdmZip from 'adm-zip';
 import { normalize, extractPhrases, sentences } from './text.mjs';
+import { nodeVersionAdvice } from './runtime.mjs';
 
 const SECTION_MAP = [
   { key: 'summary', rx: /^(professional\s+)?(summary|profile|about\s*me|objective|highlight)/i },
@@ -27,7 +28,21 @@ export async function extractText(buffer, mimetype, filename = '') {
 }
 
 async function fromPdf(buffer) {
-  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  let getDocument;
+  try {
+    ({ getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs'));
+  } catch (e) {
+    /* A library that will not even load is a runtime-version problem, not a
+       document problem. Saying "Could not read this PDF (malformed)" here would
+       send someone re-exporting a perfectly good file. */
+    throw Object.assign(
+      new Error(`The PDF reader could not load inside this Node process (${e?.message || e}). ${nodeVersionAdvice()}`),
+      { status: 500 }
+    );
+  }
+  if (typeof getDocument !== 'function') {
+    throw Object.assign(new Error(`The PDF reader loaded but exposes no getDocument — unsupported Node runtime. ${nodeVersionAdvice()}`), { status: 500 });
+  }
   let doc;
   try {
     doc = await getDocument({ data: new Uint8Array(buffer), verbosity: 0 }).promise;

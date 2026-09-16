@@ -28,6 +28,7 @@ import { tailorResume, toAtsPlain } from './lib/tailor.mjs';
 import { research } from './lib/companyResearch.mjs';
 import { scoreWithInsights, candidateVector } from './lib/match.mjs';
 import { submitToAts, submitSupport, submitLog } from './lib/atsSubmit.mjs';
+import { guardNodeVersion, nodeTooOld, nodeVersionAdvice, MIN_NODE } from './lib/runtime.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -84,6 +85,7 @@ app.get(
     json(res, {
       fields: FIELDS,
       sources: Object.entries(SOURCES).map(([key, v]) => ({ key, label: v.label, needsKey: v.needsKey })),
+      runtime: { node: process.versions.node, nodeOk: !nodeTooOld(), advice: nodeTooOld() ? nodeVersionAdvice() : null },
       pipeline: PIPELINE,
       env: {
         llmKeyConfigured: Boolean(process.env.LLM_API_KEY || getSettings()?.llm?.apiKey),
@@ -750,7 +752,19 @@ app.use((req, res) => {
 
 const PORT = Number(process.env.PORT || 3000);
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  app.listen(PORT, '0.0.0.0', () => console.log(`ApplyFlow → http://localhost:${PORT}  (data: ${DATA_DIR})`));
+  guardNodeVersion({ hard: true });
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`ApplyFlow → http://localhost:${PORT}  (data: ${DATA_DIR})`);
+    if (nodeTooOld()) console.log(`  ⚠ ${nodeVersionAdvice()}`);
+  });
 }
+
+/** Reported so /api/meta can show it instead of letting a user guess why PDFs fail. */
+export const runtimeInfo = {
+  node: process.versions.node,
+  nodeOk: !nodeTooOld(),
+  nodeMin: `${MIN_NODE.major}.${MIN_NODE.minor}`,
+  advice: nodeTooOld() ? nodeVersionAdvice() : null,
+};
 
 export default app;

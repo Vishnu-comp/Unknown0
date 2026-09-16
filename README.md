@@ -65,10 +65,17 @@ Full step-by-step (fresh checkout, extension install, tests, env vars, failure
 modes): **[RUNNING.md](RUNNING.md)**.
 
 ```bash
+node -v                # need v22.13+ — npm only WARNS if you are older, then PDF parsing dies later
 npm install
 npm run build          # bundles the UI + syncs the extension's mapper
 npm start              # http://localhost:3000   (PORT=… to change)
 ```
+
+`pdfjs-dist@6` (PDF text extraction) declares `>=22.13` and `jsdom@30` (the DOM
+test suite) declares `>=22.22.2`. On Node 18/20 everything else works —
+`.txt`/`.docx` resumes, scoring, letters, tailoring, prefill — but a PDF upload
+fails from inside the library, so the server now refuses to boot below 22.13 and
+tells you which brew/nvm command to run (`APPLYFLOW_ALLOW_OLD_NODE=1` to override).
 
 Dev mode (rebuilds assets on change, restarts the API on `server/` changes):
 
@@ -80,7 +87,7 @@ To load your actual resume from the CLI instead of the browser (same endpoints
 the UI calls — parse it, propose a profile, seed the corpus, show the ranking):
 
 ```bash
-node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15 --seed
+node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15   # ~ works here
 node scripts/load-resume.mjs --resume=resume.txt --floor=1400000   # sets the INR salary floor too
 ```
 
@@ -109,7 +116,7 @@ with zero configuration and no network. Worked path:
 ## Tests
 
 ```bash
-npm test            # 53 field-mapper/filler checks (jsdom) · 19 match-engine invariants
+npm test            # 53 field-mapper/filler checks (jsdom) · 26 match-engine + runtime checks
                     # · 14 render probes · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
 npm run test:e2e    # 111 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →

@@ -9,12 +9,25 @@ this repo; if a count or a path drifts, the code is right and this file is wrong
 
 | you need | why |
 |---|---|
-| **Node ≥ 20** (`node -v`) | ESM `import` with top-level await, `structuredClone`, `node:test` |
+| **Node ≥ 22.13** (`node -v`) | not the app's requirement — the *dependencies'*: `pdfjs-dist@6` declares `>=22.13`, `jsdom@30` declares `>=22.22.2`, and npm only **warns** |
 | npm | ships with Node 20 |
 | nothing else | 7 runtime deps (express, react, react-dom, esbuild, pdfjs-dist, adm-zip, multer) + 2 dev (jsdom, pngjs); no database, no docker, no framework CLI, no globals |
 
-Check: `node -v` should print `v20.x` or newer. `npm run start` on Node 18 fails
-on `structuredClone` in the resume loader.
+Check with `node -v`. On **Node 18 / 20** `npm install` succeeds and the UI even
+starts, but PDF upload throws from inside pdfjs and `npm run test:unit` fails in jsdom — a
+confusing "your file is broken" for what is really a runtime mismatch. So the
+server refuses to boot below 22.13 and says how to fix it:
+
+```bash
+brew install node@22 && brew link --overwrite node@22    # macOS
+nvm install --lts=jod && nvm use --lts=jod                # either OS
+node -e "console.log(process.versions.node)"               # confirm
+```
+
+Override with `APPLYFLOW_ALLOW_OLD_NODE=1` if you only ever paste resume text —
+`.txt`/`.docx` parsing, scoring, letters and tailoring all work on Node 18.
+Of the test suites only `test:unit` needs 22.22+ (it is the jsdom one);
+`test:match`, `test:render`, `test:features`, `test:ats` and `test:e2e` run on 18.
 
 ---
 
@@ -63,7 +76,7 @@ Flags (all optional except `--resume`):
 
 | flag | meaning |
 |---|---|
-| `--resume=<path>` | `.pdf`, `.docx`, `.txt`, `.md` — parsed by the same code path as the web UI |
+| `--resume=<path>` | `.pdf`, `.docx`, `.txt`, `.md` — parsed by the same code path as the web UI. `~` is expanded here, so `--resume=~/Downloads/r.pdf` is fine |
 | `--base=<url>` | app URL, default `http://127.0.0.1:3000`. Also reads `APPLYFLOW_URL` |
 | `--notice=<weeks>` | your notice period, feeds "when can you start" answers |
 | `--floor=<INR>` | salary floor. **Left unset on purpose** if you don't pass it — a guessed expectation answers a real form with a real lie, and the score follows it |
@@ -95,13 +108,13 @@ npm run test:all       # both
 | suite | checks | what it actually proves |
 |---|---:|---|
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
-| `test:match` — `scripts/match.test.mjs` | 19 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
+| `test:match` — `scripts/match.test.mjs` | 26 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 14 | every tab in every state renders without throwing |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 111 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → tailoring → intelligence → submit → exports |
 
-**237 checks, plus 14 render probes = 251.** Current tree: all green.
+**244 checks, plus 14 render probes = 258.** Current tree: all green.
 
 Useful variants:
 
@@ -110,6 +123,7 @@ npm run test:match                        # one suite
 node scripts/e2e.mjs                      # against a server you ALREADY run on :3000
 node scripts/e2e.mjs http://127.0.0.1:4000  # …or somewhere else
 node scripts/e2e.mjs --own-server         # fresh server, throwaway DATA_DIR
+npm ls jsdom --depth=0                    # the one suite that needs Node ≥ 22.22 is test:unit
 ```
 
 `--own-server` (what `npm run test:e2e` uses) spawns its own server with a temp
@@ -211,6 +225,8 @@ send `{"confirm":true}`). Submissions log to `/api/submissions`.
 | Jobs tab empty on a fresh checkout | by design — press "load demo corpus" or `POST /api/jobs/seed` |
 | `Cannot find module 'adm-zip'` | ran a script from outside the repo root — `cd` into the checkout first |
 | resume parses to a name and nothing else | the PDF is an image; it has no text layer. Use the `.docx`/`.txt` export |
+| `The PDF reader could not load inside this Node process` | Node < 22.13 (see §0) — nothing wrong with your file |
+| `no such file: ~/Downloads/x.pdf` | your shell left a literal `~` inside the flag value. The script expands `~` itself now, so this means the file really isn't there — it lists what *is* in that folder |
 | every live source errors `connect EHOSTUNREACH`/`000` | you're in the sandbox: only npm + `api.github.com` egress. Expected; use the demo corpus |
 | extension fills nothing | it only reads a copied payload — re-run "copy extension payload", then Reload the extension after `npm run build` |
 
