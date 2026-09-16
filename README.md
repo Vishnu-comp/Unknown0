@@ -61,6 +61,9 @@ wired up here.
 
 ## Quickstart
 
+Full step-by-step (fresh checkout, extension install, tests, env vars, failure
+modes): **[RUNNING.md](RUNNING.md)**.
+
 ```bash
 npm install
 npm run build          # bundles the UI + syncs the extension's mapper
@@ -77,7 +80,7 @@ To load your actual resume from the CLI instead of the browser (same endpoints
 the UI calls — parse it, propose a profile, seed the corpus, show the ranking):
 
 ```bash
-node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15
+node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15 --seed
 node scripts/load-resume.mjs --resume=resume.txt --floor=1400000   # sets the INR salary floor too
 ```
 
@@ -85,11 +88,12 @@ It only writes what your document states. The one number it deliberately leaves
 empty is the salary floor: a made-up expectation answers a real form with a
 real lie, and the score would quietly follow it.
 
-On first run the store seeds itself with 16 hand-written postings
+The store starts empty: click **Overview → "load demo corpus"** once (or
+`curl -X POST localhost:3000/api/jobs/seed`) to pull in 16 hand-written postings
 (`server/data/demoJobs.mjs`) so you can see scoring, letters and the pipeline
-with zero configuration. Worked path:
+with zero configuration and no network. Worked path:
 
-1. **Overview → load demo corpus** (already done for you)
+1. **Overview → load demo corpus** — one click, nothing else to configure
 2. **Resume → drop your PDF** (or paste text). `data/samples/sample-resume.pdf`
    is a real PDF you can test with.
 3. **Profile → fix the suggestions** the parser made (skills, work history, headline)
@@ -106,10 +110,11 @@ with zero configuration. Worked path:
 
 ```bash
 npm test            # 53 field-mapper/filler checks (jsdom) · 19 match-engine invariants
-                    # · 14 render probes · 75 tailoring/intelligence checks
+                    # · 14 render probes · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
 npm run test:e2e    # 111 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → tailoring → intelligence → direct submit → exports
+                    # (boots its own server on a random port with a throwaway DATA_DIR)
 npm run test:all    # both
 
 `npm run test:ats` boots a fake Greenhouse/Lever API on localhost and proves the

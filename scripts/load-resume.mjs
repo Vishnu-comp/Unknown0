@@ -1,6 +1,7 @@
 /**
  * Load a resume into ApplyFlow: parse it, build a profile from what the parser
- * found (plus anything you pass in), seed the demo corpus, and report how the
+ * found (plus anything you pass in), fill an empty job store with the demo
+ * corpus, and report how the
  * whole job store re-scores against you.
  *
  *   node scripts/load-resume.mjs                          # uses data/samples/sample-resume.txt
@@ -117,10 +118,24 @@ console.log(`profile saved · completeness ${c.percent}%`);
 const missing = (c.items || []).filter((i) => !i.value).map((i) => i.label);
 if (missing.length) console.log(`  still open: ${missing.join(', ')}`);
 
+let seededCount = 0;
 {
-  const seed = await post('/api/jobs/seed');
-  const stored = await get('/api/jobs');
-  console.log(`\njob store: ${stored.count ?? (stored.jobs || []).length} postings (seed added ${seed.added ?? seed.inserted ?? '?'})`);
+  const before = await get('/api/jobs');
+  const had = before.count ?? (before.jobs || []).length;
+  if (!had || args.seed) {
+    // an empty store gets the offline demo corpus so the ranking means something;
+    // a populated one is left alone unless --seed says "merge the demo ones in anyway"
+    const seed = await post('/api/jobs/seed');
+    seededCount = seed.seeded ?? 0;
+  }
+  const after = await get('/api/jobs');
+  const now = after.count ?? (after.jobs || []).length;
+  const note = seededCount
+    ? `${seededCount} demo postings seeded`
+    : had && !args.seed
+      ? `left as-is — pass --seed to add the demo corpus on top`
+      : 'empty — nothing to rank against';
+  console.log(`\njob store: ${now} postings (${note})`);
 }
 
 const jobs = await get('/api/jobs?sort=score');
