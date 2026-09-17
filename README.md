@@ -132,12 +132,12 @@ Worked path:
 
 ```bash
 npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
-                    # · 112 harvester + ingest-config checks (Naukri/LinkedIn parsing,
+                    # · 119 harvester + ingest-config checks (Naukri/LinkedIn parsing,
                     #   settings→adapter resolution, how a failed fetch is reported,
                     #   route order, and that the API makes no claim it did not measure)
                     # · 15 render probes · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-                    # = 380, and `npm run test:all` adds the 129 end-to-end ones = 509
+                    # = 387, and `npm run test:all` adds the 129 end-to-end ones = 516
 npm run test:e2e    # 129 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)

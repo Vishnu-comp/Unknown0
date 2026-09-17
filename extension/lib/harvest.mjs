@@ -162,7 +162,15 @@ export function normalizeJob(raw, source = 'imported') {
     salaryMax: sal.salaryMax ?? null,
     salaryCurrency: sal.salaryCurrency ?? null,
     salaryText: sal.salaryText || null,
-    postedAt: raw.postedAt || parsePosted(raw.postedDate || raw.timePosted || raw.aged || raw.posted),
+    /* `postedAt` is the field the extension and every importer write, so it is parsed
+       like the aliases rather than trusted: a card saying "3 days ago" used to land in
+       the store verbatim, which `sort=posted` and the recency weighting read as no date
+       at all. Unparseable stays null — an undated posting and an oddly-worded one are
+       different facts, and the store should not pretend otherwise. */
+    postedAt:
+      parsePosted(raw.postedAt) ||
+      parsePosted(raw.postedDate || raw.timePosted || raw.aged || raw.posted) ||
+      null,
     tags: [...new Set([...skills, ...String(raw.roleCategory || raw.functionalArea || '').split(/[,;|]/).map(clean).filter(Boolean)])].slice(0, 30),
     category: clean(raw.roleCategory || raw.industry || raw.functionalArea) || null,
     contractType: clean(raw.employmentType || raw.jobType || raw.type) || null,

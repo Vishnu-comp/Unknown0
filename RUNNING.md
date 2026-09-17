@@ -116,7 +116,7 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 380 checks, ~6 seconds
+npm test               # 6 suites, 387 checks, ~6 seconds
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
 npm run test:e2e       # 129 checks; boots its own server on a random port :3210-3299
@@ -129,11 +129,11 @@ npm run test:all       # both
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 15 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
-| `test:harvest` — `scripts/harvest.test.mjs` | 112 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
+| `test:harvest` — `scripts/harvest.test.mjs` | 119 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 129 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 112 + 15 + 89 + 76 = 380 checks, plus 129 end-to-end = 509.** Current tree: all green
+**53 + 30 + 119 + 15 + 89 + 76 = 387 checks, plus 129 end-to-end = 516.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 

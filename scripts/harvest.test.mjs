@@ -340,6 +340,28 @@ ok(indexMjs.includes('FETCH_ON_BOOT'), 'boot-time fetching is wired and can be t
   ok(/e\.message\.startsWith\(`\$\{s\.key\}:\`\)/.test(ing), 'adapter errors are not prefixed twice');
 }
 
+/* Import-time normalisation, asserted at the boundary rather than inside the scraper.
+   `postedAt` is the field every caller writes, and normalizeJob used to trust it
+   verbatim: an extension card saying "3 days ago" reached the store as prose, which
+   `sort=posted` and the recency component read as "no date". A parse that returns null
+   is honest; a stored string nothing can date-parse is the silent kind. */
+{
+  const card = (extra) => normalizeJob({ title: 'Staff Engineer', url: 'https://www.naukri.com/job-listings-x-44120998', ...extra }, 'naukri');
+  ok(/^\d{4}-\d{2}-\d{2}T/.test(card({ postedAt: '3 days ago' }).postedAt || ''), 'a relative postedAt is normalised, not stored as prose', card({ postedAt: '3 days ago' }).postedAt);
+  ok(card({ postedAt: 'yesterday-ish' }).postedAt === null, 'unparseable postedAt becomes null, never the raw string');
+  ok(card({ postedAt: '2026-09-15' }).postedAt === '2026-09-15T00:00:00.000Z', 'a date-only postedAt is widened the same way the aliases are');
+  const viaAlias = card({ postedDate: '3 days ago' }).postedAt;
+  const viaField = card({ postedAt: '3 days ago' }).postedAt;
+  ok(viaAlias.slice(0, 10) === viaField.slice(0, 10) && viaAlias.length > 10, 'the alias and the field agree on the day', `${viaAlias.slice(0, 10)} vs ${viaField.slice(0, 10)}`);
+  const exp = card({ experience: '7-11 Years' });
+  ok(exp.minExperience === 7 && exp.maxExperience === 11 && exp.experienceText === '7-11 Years', 'experience lands on the names the store and UI read', `${exp.minExperience}-${exp.maxExperience}`);
+  const one = normalizeJob({ title: 'No Pay', url: 'https://boards.greenhouse.io/acme/jobs/1234567' }, 'greenhouse');
+  ok(one.salaryMin === null && one.salaryCurrency === null && one.postedAt === null, 'a sparse card yields nulls, not invented zeros', JSON.stringify([one.salaryMin, one.salaryCurrency, one.postedAt]));
+  const imported = await import('../server/lib/ingest.mjs').then((m) => m.normalizeImport);
+  const rows = await imported([{ title: 'SRE', url: 'https://www.naukri.com/job-listings-sre-in-pune-44120999', experience: '5-8 Years', salary: '₹30 - ₹45 Lakhs p.a.', postedAt: '1 day ago' }], 'naukri');
+  ok(rows.length === 1 && rows[0].salaryMin === 3000000 && /^\d{4}-\d{2}-\d{2}T/.test(rows[0].postedAt), 'normalizeImport runs the same normaliser as the scrapers', JSON.stringify({ pay: rows[0].salaryMin, posted: rows[0].postedAt, exp: rows[0].minExperience }));
+}
+
 const atSeed = indexMjs.indexOf("'/api/jobs/seed'");
 ok(atImport > 0 && atImport < atClear && atImport < atSeed, 'import route registered before the other POST /api/jobs/* routes', `import@${atImport} clear@${atClear} seed@${atSeed}`);
 
