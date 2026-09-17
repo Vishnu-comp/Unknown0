@@ -20,19 +20,19 @@
     "test:match": "node scripts/match.test.mjs"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "adm-zip": "^0.6.1",
     "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "multer": "^2.4.0",
-    "pdfjs-dist": "^6.3.289",
+    "pdfjs-dist": "3.11.174",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "jsdom": "^30.0.1",
+    "jsdom": "^26.1.0",
     "pngjs": "^7.0.0"
   }
 }

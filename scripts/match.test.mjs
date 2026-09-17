@@ -51,17 +51,38 @@ const prof = (core, over = {}) => ({
   ...over,
 });
 
-console.log('\n· runtime guard agrees with what the dependencies actually declare');
+console.log('\n· runtime floor matches what the pinned dependencies actually need');
 {
-  const { nodeTooOld, nodeVersionAdvice } = await import('../server/lib/runtime.mjs');
-  ok(nodeTooOld('18.20.8') === true, 'the reported failure case (Node 18) is detected');
-  ok(nodeTooOld('20.11.1') === true, 'and the engines field we used to claim (>=20) would NOT have saved anyone');
-  ok(nodeTooOld('22.12.9') === true && nodeTooOld('22.13.0') === false, 'boundary is 22.13, where pdfjs-dist starts being satisfied');
-  ok(nodeTooOld('24.4.1') === false && nodeTooOld('v22.16.0') === false, 'newer majors and a v-prefixed string are fine');
-  const advice = nodeVersionAdvice('18.20.8');
-  ok(/pdfjs-dist|PDF/.test(advice) && /jsdom/.test(advice), 'the message names the two things that break, not a vague version complaint');
-  ok(/brew install node@22|nvm install/.test(advice), 'and gives copy-pasteable fixes');
-  ok(/\.txt|\.docx|paste/i.test(advice), 'plus the workaround for someone who cannot upgrade right now');
+  const { nodeTooOld, nodeVersionAdvice, MIN_NODE } = await import('../server/lib/runtime.mjs');
+  const fs = await import('node:fs');
+  const readEngines = (pkg) => {
+    try {
+      return JSON.parse(fs.readFileSync(new URL(`../node_modules/${pkg}/package.json`, import.meta.url), 'utf8')).engines?.node || '';
+    } catch {
+      return 'MISSING';
+    }
+  };
+  ok(nodeTooOld('18.0.0') === false && nodeTooOld('18.20.8') === false, `Node 18 is supported (${MIN_NODE.major}.${MIN_NODE.minor})`);
+  ok(nodeTooOld('16.20.2') === true && nodeTooOld('v16.0.0') === true, 'Node 16 is refused, v-prefix tolerated');
+  const floorOf = (spec) => {
+    const m = String(spec).match(/(\d+)\.(\d+)/) || String(spec).match(/(\d+)/);
+    return m ? { major: Number(m[1]), minor: Number(m[2] || 0) } : null;
+  };
+  for (const pkg of ['pdfjs-dist', 'jsdom']) {
+    const spec = readEngines(pkg);
+    const want = floorOf(spec);
+    ok(spec !== 'MISSING', `${pkg} is installed`);
+    if (want) {
+      ok(MIN_NODE.major >= want.major && MIN_NODE.minor >= want.minor, `guard floor ≥ ${pkg}'s declared engines (${spec})`);
+    }
+  }
+  const pin = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  ok(pin.dependencies['pdfjs-dist'] === '3.11.174', 'pdfjs-dist is pinned exactly — a caret here would silently reintroduce a Node 20 requirement', pin.dependencies['pdfjs-dist']);
+  ok(/>=18/.test(pin.engines?.node || ''), `package.json engines agrees (${pin.engines?.node})`);
+  const advice = nodeVersionAdvice('16.20.2');
+  ok(/pdfjs-dist|PDF/.test(advice), 'the message names the thing that breaks');
+  ok(/\.txt|\.docx|paste/i.test(advice), 'and offers the no-upgrade workaround');
+  ok(/nvm|brew|volta/.test(advice), 'and gives a copy-pasteable fix');
 }
 
 console.log('\n· the `core` skill flag actually does something (and stays modest)');

@@ -65,17 +65,21 @@ Full step-by-step (fresh checkout, extension install, tests, env vars, failure
 modes): **[RUNNING.md](RUNNING.md)**.
 
 ```bash
-node -v                # need v22.13+ — npm only WARNS if you are older, then PDF parsing dies later
+node -v                # Node 18+ — 18.20.8 is what this is developed against
 npm install
 npm run build          # bundles the UI + syncs the extension's mapper
 npm start              # http://localhost:3000   (PORT=… to change)
 ```
 
-`pdfjs-dist@6` (PDF text extraction) declares `>=22.13` and `jsdom@30` (the DOM
-test suite) declares `>=22.22.2`. On Node 18/20 everything else works —
-`.txt`/`.docx` resumes, scoring, letters, tailoring, prefill — but a PDF upload
-fails from inside the library, so the server now refuses to boot below 22.13 and
-tells you which brew/nvm command to run (`APPLYFLOW_ALLOW_OLD_NODE=1` to override).
+**Node 18 is supported on purpose**, which constrains two dependencies:
+`pdfjs-dist` is pinned exactly to **3.11.174** (the last major declaring
+`node >=18`; 4.x wants 20, 5.x wants 22.13) and `jsdom` is pinned to **26**
+(30 wants 22.22.2). npm only *warns* about engine mismatches, so an unpinned
+bump would surface much later as a PDF upload failing inside the library — hence
+`server/lib/runtime.mjs` checks the floor at boot and `scripts/match.test.mjs`
+asserts the guard and the pins can't drift apart. 3.x ships only a CommonJS
+entry (`legacy/build/pdf.js`), and `loadPdfJs()` tries the ESM path first and
+falls back to `require()`, so upgrading pdfjs later needs no code change.
 
 Dev mode (rebuilds assets on change, restarts the API on `server/` changes):
 
@@ -116,7 +120,7 @@ with zero configuration and no network. Worked path:
 ## Tests
 
 ```bash
-npm test            # 53 field-mapper/filler checks (jsdom) · 26 match-engine + runtime checks
+npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
                     # · 14 render probes · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
 npm run test:e2e    # 111 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →

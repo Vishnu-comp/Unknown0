@@ -5,6 +5,7 @@
  */
 import AdmZip from 'adm-zip';
 import { normalize, extractPhrases, sentences } from './text.mjs';
+import { createRequire } from 'node:module';
 import { nodeVersionAdvice } from './runtime.mjs';
 
 const SECTION_MAP = [
@@ -27,10 +28,87 @@ export async function extractText(buffer, mimetype, filename = '') {
   return fromPlain(buffer.toString('utf8'), 'txt');
 }
 
+/**
+ * pdfjs-dist moved its entry points around between majors: ≥4 ships an ESM
+ * build (legacy/build/pdf.mjs), 3.x — the last line that supports Node 18 — is
+ * CommonJS only (legacy/build/pdf.js). Try ESM, fall back to require, and never
+ * pretend a packaging difference is a problem with the user's document.
+ */
+/* pdfjs 3.x prints "Cannot polyfill `DOMMatrix`/`Path2D`, rendering may be
+   broken" at module-evaluation time when `canvas` (an optional dep used only for
+   *drawing*) is absent. We extract text; that warning is noise, and noise in a
+   CLI becomes "is my resume broken?" in a UI. Swallow only those lines, replay
+   everything else. */
+const PDFJS_HARMLESS = /Cannot polyfill|rendering may be broken|Cannot find module 'canvas'/;
+function quiet(fn) {
+  const kept = [];
+  const originals = {};
+  for (const k of ['warn', 'error', 'log']) {
+    originals[k] = console[k];
+    console[k] = (...a) => {
+      const line = a.map((x) => (typeof x === 'string' ? x : String(x))).join(' ');
+      if (PDFJS_HARMLESS.test(line)) return;
+      kept.push([k, a]);
+    };
+  }
+  const restore = () => Object.assign(console, originals);
+  return Promise.resolve()
+    .then(fn)
+    .then(
+      (v) => {
+        restore();
+        for (const [k, a] of kept) console[k](...a);
+        return v;
+      },
+      (e) => {
+        restore();
+        for (const [k, a] of kept) console[k](...a);
+        throw e;
+      }
+    );
+}
+
+async function loadPdfJs() {
+  const errs = [];
+  for (const spec of ['pdfjs-dist/legacy/build/pdf.mjs', 'pdfjs-dist/build/pdf.mjs']) {
+    try {
+      const mod = await quiet(() => import(spec));
+      if (typeof mod.getDocument === 'function') return mod;
+      errs.push(`${spec}: loaded but no getDocument export`);
+    } catch (e) {
+      errs.push(`${spec}: ${e?.code || e?.name || 'error'} ${e?.message || ''}`.trim());
+    }
+  }
+  try {
+    const req = createRequire(import.meta.url);
+    const mod = await quiet(() => req('pdfjs-dist/legacy/build/pdf.js'));
+    if (typeof mod?.getDocument === 'function') return mod;
+    errs.push('legacy/build/pdf.js (CJS): no getDocument export');
+  } catch (e) {
+    errs.push(`legacy CJS entry: ${e?.code || e?.name || 'error'} ${e?.message || ''}`.trim());
+  }
+  const ver = pdfjsVersion();
+  throw Object.assign(
+    new Error(
+      `no usable pdfjs-dist entry point (installed version: ${ver || 'not installed'}). ` +
+      `Tried: ${errs.join(' | ')}`
+    ),
+    { status: 500, pdfjsVersion: ver }
+  );
+}
+
+function pdfjsVersion() {
+  try {
+    return createRequire(import.meta.url)('../pdfjs-dist/package.json').version;
+  } catch {
+    return '';
+  }
+}
+
 async function fromPdf(buffer) {
   let getDocument;
   try {
-    ({ getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs'));
+    ({ getDocument } = await loadPdfJs());
   } catch (e) {
     /* A library that will not even load is a runtime-version problem, not a
        document problem. Saying "Could not read this PDF (malformed)" here would

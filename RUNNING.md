@@ -9,25 +9,31 @@ this repo; if a count or a path drifts, the code is right and this file is wrong
 
 | you need | why |
 |---|---|
-| **Node ≥ 22.13** (`node -v`) | not the app's requirement — the *dependencies'*: `pdfjs-dist@6` declares `>=22.13`, `jsdom@30` declares `>=22.22.2`, and npm only **warns** |
-| npm | ships with Node 20 |
-| nothing else | 7 runtime deps (express, react, react-dom, esbuild, pdfjs-dist, adm-zip, multer) + 2 dev (jsdom, pngjs); no database, no docker, no framework CLI, no globals |
+| **Node ≥ 18.0** (`node -v`) | 18.20.8 is the version this is developed against. `pdfjs-dist@3.11.174` and `jsdom@26` are pinned to majors that support it |
 
-Check with `node -v`. On **Node 18 / 20** `npm install` succeeds and the UI even
-starts, but PDF upload throws from inside pdfjs and `npm run test:unit` fails in jsdom — a
-confusing "your file is broken" for what is really a runtime mismatch. So the
-server refuses to boot below 22.13 and says how to fix it:
+### Why those two versions are pinned
 
-```bash
-brew install node@22 && brew link --overwrite node@22    # macOS
-nvm install --lts=jod && nvm use --lts=jod                # either OS
-node -e "console.log(process.versions.node)"               # confirm
+`pdfjs-dist` 4+ requires Node 20 and 5+ requires 22.13; `jsdom` 30 requires
+22.22.2. Bumping either silently drops Node 18 support — and npm only *warns*
+about engine mismatches, so the breakage surfaces later, inside a PDF upload.
+That trap is now guarded three ways:
+
+```
+package.json          engines.node >=18.0.0, pdfjs-dist pinned "3.11.174" (no caret)
+server/lib/runtime.mjs  MIN_NODE + an advice string, checked at boot
+scripts/match.test.mjs  asserts the guard floor ≥ each dep's declared engines
+                        and that the pin is exact
 ```
 
-Override with `APPLYFLOW_ALLOW_OLD_NODE=1` if you only ever paste resume text —
-`.txt`/`.docx` parsing, scoring, letters and tailoring all work on Node 18.
-Of the test suites only `test:unit` needs 22.22+ (it is the jsdom one);
-`test:match`, `test:render`, `test:features`, `test:ats` and `test:e2e` run on 18.
+To move to a newer pdfjs on purpose: raise `MIN_NODE`, update `engines`, and the
+test that ties them together will tell you which one you forgot. Node 18 also
+means `legacy/build/pdf.js` is CommonJS (3.x ships no `.mjs`), which
+`loadPdfJs()` in `server/lib/resume.mjs` handles by trying the ESM entry first
+and falling back to `require()` — so a later bump to 4.x or 5.x needs no code
+change there either.
+
+Confirm with `node -e "console.log(process.versions.node)"` — and if it prints
+18.20.8, you are on exactly the version this was last exercised against.
 
 ---
 
@@ -54,7 +60,7 @@ Data lives in `./data/*.json` — plain files, git-ignored, safe to delete.
 
 | command | what happens |
 |---|---|
-| `npm install` | 6 runtime deps (React, esbuild, jsdom for tests, pdf parsing, adm-zip) |
+| `npm install` | 7 runtime deps (express, react, react-dom, esbuild, pdfjs-dist, adm-zip, multer) + 2 dev (jsdom, pngjs) |
 | `npm run build` | esbuild-bundles `client/main.jsx` → `public/app.js`, copies `index.html` + `styles.css`, then copies `server/lib/{fieldmap,fill}.mjs` into `extension/lib/` so the extension and server can never disagree about form mapping |
 | `npm start` | `node server/index.mjs` — API + static UI on one port, binds `0.0.0.0` |
 | `npm run dev` | same server **plus** esbuild in watch mode; restarts the API when `server/**` changes. Use this if you edit anything |
@@ -108,13 +114,13 @@ npm run test:all       # both
 | suite | checks | what it actually proves |
 |---|---:|---|
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
-| `test:match` — `scripts/match.test.mjs` | 26 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
+| `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 14 | every tab in every state renders without throwing |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 111 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → tailoring → intelligence → submit → exports |
 
-**244 checks, plus 14 render probes = 258.** Current tree: all green.
+**248 checks, plus 14 render probes = 262.** Current tree: all green.
 
 Useful variants:
 
@@ -123,7 +129,7 @@ npm run test:match                        # one suite
 node scripts/e2e.mjs                      # against a server you ALREADY run on :3000
 node scripts/e2e.mjs http://127.0.0.1:4000  # …or somewhere else
 node scripts/e2e.mjs --own-server         # fresh server, throwaway DATA_DIR
-npm ls jsdom --depth=0                    # the one suite that needs Node ≥ 22.22 is test:unit
+npm ls pdfjs-dist jsdom                    # both must stay on the pinned majors (§0)
 ```
 
 `--own-server` (what `npm run test:e2e` uses) spawns its own server with a temp
@@ -225,7 +231,7 @@ send `{"confirm":true}`). Submissions log to `/api/submissions`.
 | Jobs tab empty on a fresh checkout | by design — press "load demo corpus" or `POST /api/jobs/seed` |
 | `Cannot find module 'adm-zip'` | ran a script from outside the repo root — `cd` into the checkout first |
 | resume parses to a name and nothing else | the PDF is an image; it has no text layer. Use the `.docx`/`.txt` export |
-| `The PDF reader could not load inside this Node process` | Node < 22.13 (see §0) — nothing wrong with your file |
+| `The PDF reader could not load inside this Node process` | Node too old for the pinned pdfjs, or someone bumped it past 3.x on a Node 18 box (see §0) — nothing wrong with your file |
 | `no such file: ~/Downloads/x.pdf` | your shell left a literal `~` inside the flag value. The script expands `~` itself now, so this means the file really isn't there — it lists what *is* in that folder |
 | every live source errors `connect EHOSTUNREACH`/`000` | you're in the sandbox: only npm + `api.github.com` egress. Expected; use the demo corpus |
 | extension fills nothing | it only reads a copied payload — re-run "copy extension payload", then Reload the extension after `npm run build` |

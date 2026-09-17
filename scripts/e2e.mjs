@@ -8,7 +8,7 @@ import path from 'node:path';
  * Verifies: ingest → scoring honesty → letter/answer composition → prefill pack
  *           → auto-apply runner policy (caps, excludes) → exports.
  */
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import os from 'node:os';
 
 const SELF = process.argv.includes('--own-server');
@@ -268,13 +268,23 @@ const missing = await j('/api/jobs/does-not-exist');
 check('404 for unknown job', missing.status === 404);
 const noResume = await j('/api/resume', { method: 'POST', body: JSON.stringify({ text: 'too short' }) });
 check('tiny pasted resume rejected with guidance', noResume.status === 400, (noResume.data.error || '').slice(0, 60));
+/* public/ is a build artefact and is git-ignored, so it can legitimately be
+   absent when someone runs e2e straight after a clone or a clean. Build it
+   rather than reporting a fake failure about the app being broken. */
+const rootDir = process.cwd();
+if (!fs.existsSync(path.join(rootDir, 'public', 'app.js'))) {
+  console.log('  · public/app.js missing → running npm run build first');
+  execSync('node scripts/build.mjs', { cwd: rootDir, stdio: 'ignore' });
+}
 const spa = await fetch(`${BASE}/`);
 const html = await spa.text();
 check('SPA served at /', html.includes('ApplyFlow') && html.includes('/app.js'));
 const bundle = await fetch(`${BASE}/app.js`);
-check('bundle built + served', bundle.status === 200 && Number(bundle.headers.get('content-length')) > 20000, `${(Number(bundle.headers.get('content-length')) / 1024).toFixed(0)} kB`);
+const bundleBytes = (await bundle.arrayBuffer()).byteLength; // measured, not trusted from a header
+check('bundle built + served', bundle.status === 200 && bundleBytes > 20000, `${(bundleBytes / 1024).toFixed(0)} kB`);
 const styles = await fetch(`${BASE}/styles.css`);
-check('css served', styles.status === 200);
+const cssBytes = (await styles.arrayBuffer()).byteLength;
+check('css served', styles.status === 200 && cssBytes > 1000, `${(cssBytes / 1024).toFixed(1)} kB`);
 const health = await j('/healthz');
 check('healthcheck', health.data.ok === true);
 
