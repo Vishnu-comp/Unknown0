@@ -326,7 +326,11 @@ export function parseResume(text) {
     .split(/[,•|;\/]/)
     .map((s) => s.trim())
     .filter((s) => s.length > 1 && s.length < 34 && !/:/.test(s) && !/^(?:and|other|etc\.?)$/i.test(s))
-    .slice(0, 40);
+    /* 64, not 40: a Skills block is the one place a resume states everything it can do.
+       Truncating it makes the matcher read a stated technology as absent, which costs
+       points and silently rewrites what you told the document. The cap only exists to
+       stop pathological input, so it should sit above real resumes, not inside them. */
+    .slice(0, 64);
   const stackSkills = (sections.experience || [])
     .flatMap((l) => (l.match(/\(([^)]{4,})\)/g) || []).map((x) => x.slice(1, -1)))
     .flatMap((x) => x.split(/,/))
@@ -340,6 +344,33 @@ export function parseResume(text) {
   const expLines = sections.experience || [];
   const experience = [];
   for (let i = 0; i < expLines.length; i++) {
+    /* A company on its own line, with the role on the next one starting with an em
+       dash and the dates on the line after that, is what a two-column PDF flattens
+       to:
+         Shoffr
+         — Software Development Engineer (NextJS, TypeScript, MySQL, Spring Boot…)
+         Jan 2025 – Present
+       The old loop started an entry only at a line carrying a date range, so this
+       shape came out as `title:"Shoffr", company:""`: the company landed in the job
+       title, `{currentCompany}` in every letter went blank, and titleKeywords —
+       which drive title matching — were company names. Joining the dash line into
+       the header reuses the one-line path, which already splits it correctly. The
+       em dash is the guard: an achievement bullet starting with a hyphen is never a
+       role, and swallowing one would silently eat the bullet list. */
+    if (!findDateRange(expLines[i]) && /^\s*[—–]\s+\S/.test(expLines[i + 1] || '')) {
+      const joined = `${expLines[i].trim()} — ${expLines[i + 1].replace(/^\s*[—–]\s*/, '').trim()}`;
+      /* The date may already sit on the dash line, or one line further down; append
+         whichever it is and drop the consumed lines, so the entry below is read as an
+         ordinary one-line "Company — Role | dates" header. */
+      for (const d of [i + 1, i + 2]) {
+        const ln = expLines[d] || '';
+        if (findDateRange(ln)) {
+          expLines[i] = `${joined}${d === i + 1 ? '' : ' | ' + ln.trim()}`;
+          expLines.splice(i + 1, d - i);
+          break;
+        }
+      }
+    }
     const range = findDateRange(expLines[i]);
     if (!range) continue;
     const residual = (expLines[i].slice(0, range.start) + ' ' + expLines[i].slice(range.end)).replace(/^\s*[-–—|,·:]+\s*/, '').replace(/\s*[-–—|,·:]+\s*$/, '').trim();
@@ -637,7 +668,7 @@ export function suggestProfilePatch(parsed, existing) {
   }
   if (parsed.skills?.length) {
     const known = new Set((existing?.skills || []).map((s) => s.name.toLowerCase()));
-    const additions = parsed.skills.filter((s) => !known.has(s.toLowerCase())).slice(0, 25).map((name) => ({ name, level: 3, core: false }));
+    const additions = parsed.skills.filter((s) => !known.has(s.toLowerCase())).slice(0, 60).map((name) => ({ name, level: 3, core: false }));
     if (additions.length) {
       patch.skills = [...(existing?.skills || []), ...additions];
       changed.push(`Skills (+${additions.length})`);

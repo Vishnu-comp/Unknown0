@@ -40,11 +40,21 @@ function networkHint(url, e) {
             ? 'request failed at the network layer'
             : null;
   if (!transport) return e; // a real HTTP/parse error already carries its own explanation
+  const tls = /CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED/i.test(code);
+  /* Two changes here, both from a real session on a laptop behind an inspecting
+     middlebox. (1) The advice used to ride on every single error, so a run of three
+     Greenhouse boards printed the same forty-word paragraph three times and the part
+     that actually varied — which host, which code — got buried. It now rides once, on
+     the summary the caller builds, and each line stays short. (2) "a filtering/inspecting
+     proxy answered for this host" is a guess about the user's machine. Node hands us the
+     certificate that failed verification (ERR_TLS_CERT_ALTNAME_INVALID puts it in
+     cause.detail); quoting its issuer turns the guess into a diagnosis — "issuer:
+     Netskope" tells you exactly which process to look at. */
+  const peer = String(e?.cause?.detail?.cert || e?.cause?.peerCertificate || '');
+  const issuer = peer ? peer.match(/O=([^,;]+)/)?.[1]?.trim().slice(0, 48) : '';
+  /* One line, one fact, no advice: the caller's summary states what to do about it. */
   return new Error(
-    `${host} → ${transport}${/CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED/i.test(code) ? '' : ` (${code})`}.` +
-    ' A blocked network looks exactly like a source with no jobs, so if you are in a' +
-    ' sandbox or behind an egress allowlist, expect this — use Settings → Import jobs' +
-    ' JSON, or the extension on a page you have open, instead.'
+    `${host} → ${transport}${tls ? (issuer ? ` (certificate issued by ${issuer})` : '') : ` (${code})`}.`
   );
 }
 

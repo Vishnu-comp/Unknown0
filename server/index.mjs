@@ -438,7 +438,7 @@ async function ingestFromSources({ keys = null, profile = null } = {}) {
       error:
         `Nothing came back from: ${enabled.map((e) => e.key).join(', ')}.` +
         (errors.length ? ` Errors → ${errors.join(' | ')}` : '') +
-        ' — nothing was merged, so the store still holds your last good jobs. A blocked or filtered network looks exactly like a quiet board, so check the errors above before assuming there are no jobs.',
+        ' — nothing was merged, so the store still holds your last good jobs. A blocked or filtered network looks exactly like a quiet board, so check the errors above before assuming there are no jobs — or skip the network entirely: Settings → Import jobs JSON, or the extension on a page you already have open.',
     };
   }
   const merged = mergeJobs(jobs, getJobs());

@@ -260,6 +260,18 @@ const atClear = indexMjs.indexOf("'/api/jobs/clear'");
       an empty list, which the app then reports as "this source had no jobs".
    Both are silent-failure classes, which is what this product can least afford. */
 ok(/CERT\|SSL\|TLS\|UNABLE_TO_/.test(ingestMjs), 'networkHint recognises TLS-interception codes, not just ECONN*');
+{
+  const hintCode = ingestMjs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const idxCode = indexMjs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  ok(/cause\?\.detail\?\.cert/.test(hintCode), 'networkHint reads the failing certificate so the interceptor is named, not guessed');
+  ok(!/sandbox or behind an egress allowlist/.test(hintCode),
+    'networkHint states only host+reason: three boards used to print the same forty-word advice three times and bury what differed');
+  ok(/A blocked or filtered network looks exactly like a quiet board/.test(idxCode) &&
+    /Settings → Import jobs JSON/.test(idxCode),
+    'the advice survives exactly once, in the run summary built by index.mjs');
+  ok(/A blocked or filtered network looks exactly like a quiet board/.test(idxCode),
+    'it is stated once instead, on the run summary');
+}
 ok(!/greenhouse: \$\{failed\.length\}/.test(ingestMjs), 'greenhouse distinguishes unreachable boards from empty ones');
 ok(/no board slugs configured/.test(ingestMjs) && /no org slugs configured/.test(ingestMjs), 'ATS adapters say "not configured" instead of returning nothing');
 

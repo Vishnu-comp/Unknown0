@@ -186,6 +186,35 @@ console.log('\n· resume parsing hygiene (skills, contact, titles)');
   ok(sum.contact.website.includes('vercel.app') && !sum.contact.website.includes('gmail'), 'portfolio site is the portfolio, not the email host', sum.contact.website);
   ok(sum.contact.linkedin === 'linkedin.com/in/vishnu-nair-tech', 'LinkedIn path is not rewritten into a prose slug', sum.contact.linkedin);
   ok(sum.yearsOfExperience >= 2 && sum.yearsOfExperience <= 3, `years read from the date ranges (${sum.yearsOfExperience})`);
+
+  /* A two-column PDF flattens one header into three lines — company, then "— Role
+     (stack)", then dates. That shape used to come out as title:"Shoffr", company:"",
+     which put the employer's name in the job-title slot, blanked {currentCompany} in
+     every letter, and made titleKeywords (the title-match input) company names. */
+  const roleBelow = (dateLine) =>
+    parseResume(
+      'EXPERIENCE\nShoffr\n— Software Development Engineer (NextJS, TypeScript, MySQL, Spring Boot)\n' +
+        dateLine +
+        '\n• Designed backend logic for trip prioritization, reducing manual work by 75% using functional programming.\n' +
+        '• Integrated Paytm Link, UPI and payment authentication APIs, cutting failures by 76%.\n'
+    ).experience[0];
+  for (const [name, dateLine] of [['dates on their own line', 'Jan 2025 – Present'], ['dates on the role line', '| Jan 2025 – Present']]) {
+    const e = roleBelow(dateLine);
+    ok(e.company === 'Shoffr' && /^Software Development Engineer$/.test(e.title),
+      `company-role with ${name} → company "Shoffr", title "Software Development Engineer", got ${JSON.stringify(e.company)}/${JSON.stringify(e.title)}`);
+    ok(e.start === '2025-01' && e.current === true, `the date range still reads (${e.start}, current=${e.current})`);
+    ok(e.bullets.length === 2, `both achievements survive the merge (${e.bullets.length})`);
+  }
+  /* the guard: a hyphen-bulleted achievement is not a role line */
+  const swallowed = parseResume(
+    'EXPERIENCE\nZomato\n- Designed a caching layer that cut p99 latency by 40% for 3M requests a day.\nJan 2025 – Present\n'
+  ).experience[0];
+  ok(!swallowed || !/caching layer/.test(swallowed.company || ''),
+    'a hyphen bullet is never merged into the header as if it were a role');
+  /* Skills were capped at 40, so a resume that states more lost technologies the
+     matcher then scored as absent. */
+  const many = 'SKILLS\n' + ['GraphQL', 'Terraform', 'Kafka', 'Redis', 'Envoy', 'gRPC', 'Prometheus', 'Grafana', 'Jest', 'Cypress', 'Gradle', 'Maven', 'Spring Security', 'OAuth2', 'JWT', 'Elasticsearch', 'ClickHouse', 'Airflow', 'Spark', 'Flink', 'Nginx', 'HAProxy', 'RabbitMQ', 'Protobuf', 'OpenTelemetry', 'Kubernetes', 'Helm', 'ArgoCD', 'Vault', 'Consul', 'Istio', 'KEDA', 'Playwright', 'Storybook', 'Datadog', 'Sentry', 'PagerDuty', 'Liquibase', 'Snowflake', 'dbt', 'Looker', 'Tableau', 'Django', 'FastAPI', 'Celery', 'Hibernate', 'Flyway', 'Testcontainers', 'Pact'].join(', ') + '\n';
+  ok(parseResume(many).skills.length >= 46, `49 stated skills pass through (got ${parseResume(many).skills.length}; this was capped at 40)`);
 }
 
 /* -------------------------------- intelligence -------------------------------- */
