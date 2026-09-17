@@ -302,6 +302,29 @@ const appNoInsights = await composeApplication({ job: { ...sre, id: 'job_plain' 
 ok(appNoInsights.score === scoreJob(sre, profile, resume).score, 'useInsights:false reproduces the raw matcher score exactly');
 ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insights are off (they are independent features)');
 
+/* Removing the demo corpus from the code left it on disk for anyone who had ever
+   clicked "load demo corpus": data/jobs.json is local, gitignored, and survives an
+   upgrade. purgeDemoJobs() is what stops those invented postings from being scored
+   next to real ones forever. */
+{
+  db.write('jobs', [
+    { id: 'job_real', source: 'github_archive', title: 'Real', url: 'https://a/1' },
+    ...demoJobs.slice(0, 3),
+    { id: 'job_demo_legacy', source: 'demo', title: 'Legacy demo', url: 'https://a/2' },
+    { id: 'demo_9', source: 'fixture', title: 'New fixture tag', url: 'https://a/3' },
+  ]);
+  db.write('applications', [{ id: 'app_x', jobId: 'job_demo_legacy' }]);
+  const r = db.purgeDemoJobs();
+  ok(r.removed === 5, `the purge deleted exactly the synthetic rows (got ${r.removed}, expected 5)`);
+  ok(db.read('jobs', []).length === 1 && db.read('jobs', [])[0].id === 'job_real',
+    'the one real posting survives the purge');
+  ok(db.purgeDemoJobs().removed === 0, 'the purge is idempotent — a clean store costs nothing');
+  ok(db.purgeDemoJobs().orphans === undefined, 'nothing is reported once there is nothing to report');
+  const src = fs.readFileSync('server/index.mjs', 'utf8');
+  ok(/purgeDemoJobs,\s*\n\s*getApplications/.test(src) && /const purged = purgeDemoJobs\(\);/.test(src),
+    'the purge runs at boot, before anything can score the store');
+}
+
 /* The CLI ingest tool is where a fabricated default hurts most, because it runs
    unattended in a shell and its output goes straight into the store. Source-grepped,
    same style as the route-shape checks in test:harvest: a test that re-walks the

@@ -155,9 +155,9 @@ npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine +
                     # · 119 harvester + ingest-config checks (Naukri/LinkedIn parsing,
                     #   settings→adapter resolution, how a failed fetch is reported,
                     #   route order, and that the API makes no claim it did not measure)
-                    # · 18 render probes (incl. a genuinely blank first-run profile) · 105 tailoring/intelligence/parsing/attestation checks
+                    # · 18 render probes (incl. a genuinely blank first-run profile) · 110 tailoring/intelligence/parsing/attestation checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-                    # = 397 (53+30+121+18+105+76), and `npm run test:all` adds 132 e2e = 529
+                    # = 402 (53+30+121+18+110+76), and `npm run test:all` adds 132 e2e = 534
 npm run test:e2e    # 132 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
@@ -399,7 +399,7 @@ back up, or `git`-it:
 | --- | --- |
 | `profile.json` | identity, experience, education, skills, targets, standing answers. Legal attestations and consent are **absent, not defaulted** — unset means "ask me" |
 | `resume.json` | extracted text, parsed structure, suggested profile patch |
-| `jobs.json` | normalized postings (upserted by `extId`, ids stay stable) |
+| `jobs.json` | normalized postings (upserted by `extId`, ids stay stable). Any posting whose source is synthetic — the old `demo` corpus or the test fixtures — is **deleted at boot** |
 | `applications.json` | packs: letter, answers, prefill, tailored resume + audit, posting insights, status history |
 | `submissions.json` | every direct-ATS attempt: dry run, sent, refused, ATS status code, external application id |
 | `settings.json` | source configs, runner policy, optional model key |

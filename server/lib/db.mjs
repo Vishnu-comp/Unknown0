@@ -165,6 +165,31 @@ export function saveJobs(list) {
   return write('jobs', list);
 }
 
+/* Removing the bundled demo corpus from the code does not remove it from a disk that
+   was written while the code still had it: data/jobs.json is a local store, so jobs
+   with `source:'demo'` (and the ids the old seed route gave them) survive the upgrade
+   and keep scoring next to real postings — looking like data, invented. The runtime
+   ingest path can never produce that source, so anything tagged this way is synthetic
+   and is deleted once at boot rather than left to rot into the rankings. */
+export function purgeDemoJobs() {
+  const jobs = read('jobs', []);
+  if (!Array.isArray(jobs) || !jobs.length) return { removed: 0, total: 0 };
+  const isDemo = (j) =>
+    j?.source === 'demo' || j?.source === 'fixture' ||
+    /^job_demo_/.test(String(j?.id || '')) || /^demo_\d+$/.test(String(j?.id || ''));
+  const kept = jobs.filter((j) => !isDemo(j));
+  const removed = jobs.length - kept.length;
+  if (removed) {
+    write('jobs', kept);
+    const apps = read('applications', []);
+    const orphans = kept.length && Array.isArray(apps)
+      ? apps.filter((a) => !kept.some((j) => j.extId === a.jobExtId || j.id === a.jobId)).length
+      : apps.length;
+    return { removed, total: kept.length, orphans };
+  }
+  return { removed: 0, total: jobs.length };
+}
+
 export function getResume() {
   return read('resume', null);
 }

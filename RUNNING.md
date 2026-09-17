@@ -121,7 +121,7 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 397 checks, ~6 seconds
+npm test               # 6 suites, 402 checks, ~6 seconds
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
 npm run test:e2e       # 132 checks; boots its own server on a random port :3210-3299
@@ -133,12 +133,12 @@ npm run test:all       # both
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 18 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
-| `test:features` — `scripts/features.test.mjs` | 105 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:features` — `scripts/features.test.mjs` | 110 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:harvest` — `scripts/harvest.test.mjs` | 119 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 132 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 121 + 18 + 105 + 76 = 397 checks, plus 132 end-to-end = 529.** Current tree: all green
+**53 + 30 + 121 + 18 + 110 + 76 = 402 checks, plus 132 end-to-end = 534.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -238,6 +238,16 @@ empty list dressed up as "no matches".
 | `LLM_API_KEY` | unset | letter polish; everything else works without it |
 | `ATS_TIMEOUT_MS` / `FETCH_TIMEOUT_MS` | built-in | outbound request budgets |
 | `ATS_API_BASE` | unset | only for pointing `test:ats`-style calls at a mock |
+| `FETCH_ON_BOOT` | on | pull enabled sources at startup when the store is empty; `0` opts out, `force` pulls every boot |
+| `ALLOW_FIXTURE_SEED` | unset | the **only** way the 16 test postings can reach a store; tests set it, the product never does |
+
+Upgrading from the demo-corpus era: those 16 postings lived in `data/jobs.json`, which
+is git-ignored, so removing them from the code does not remove them from your disk. Boot
+now deletes any posting with a synthetic source and says so on the console; it never
+touches applications you drafted, it just names the ones left pointing at a removed job.
+The purge is idempotent and cannot fire on real ingest — no runtime adapter can produce
+that source tag. To put the fixtures in deliberately (they are test data, not reality):
+`ALLOW_FIXTURE_SEED=1` then `POST /api/jobs/seed`.
 
 Backup = copy `data/`. Reset = `rm -rf data/*.json` (the server recreates a
 default profile on next start). There are no secrets in the repo; `data/` is

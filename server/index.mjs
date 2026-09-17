@@ -11,6 +11,7 @@ import {
   saveSettings,
   getJobs,
   saveJobs,
+  purgeDemoJobs,
   getApplications,
   saveApplications,
   getResume,
@@ -919,6 +920,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   app.listen(PORT, '0.0.0.0', async () => {
     console.log(`ApplyFlow → http://localhost:${PORT}  (data: ${DATA_DIR})`);
     if (nodeTooOld()) console.log(`  ⚠ ${nodeVersionAdvice()}`);
+    /* Before anything reads the store: drop demo postings left behind by an older
+       install, so the first scores of the day are not computed against invented jobs.
+       Purge-orphaned drafts are named here rather than quietly deleted — a letter you
+       wrote yourself is your data even if the job under it was not. */
+    const purged = purgeDemoJobs();
+    if (purged.removed) {
+      console.log(`  ⚠ removed ${purged.removed} DEMO posting(s) left in data/jobs.json by an older version` +
+        ` — they were never real openings (store: ${purged.total}).` +
+        (purged.orphans ? ` ${purged.orphans} draft(s) applied to them are still in Applications; delete them there.` : '') +
+        ` Real jobs come from /api/jobs/fetch or /api/jobs/import.`);
+    }
     /* Realtime by default: with no demo corpus to fall back on, an empty store on
        a fresh boot would just look broken. So pull from whatever the user enabled,
        in the background — a slow or blocked board must never delay the port or
