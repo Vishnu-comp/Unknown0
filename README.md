@@ -121,18 +121,27 @@ with zero configuration and no network. Worked path:
 
 ```bash
 npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
-                    # · 14 render probes · 89 tailoring/intelligence/parsing checks
+                    # · 82 harvester checks (Naukri/LinkedIn parsing) · 15 render probes
+                    # · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-npm run test:e2e    # 111 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
-                    # pipeline → tailoring → intelligence → direct submit → exports
+npm run test:e2e    # 129 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
+                    # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
 npm run test:all    # both
+npm run test:harvest # harvester alone: jsdom fixtures for both scrapers + every
+                    # salary/date shape, each one a real bug this code used to have
+```
 
 `npm run test:ats` boots a fake Greenhouse/Lever API on localhost and proves the
 safety rails hold: a dry run sends zero bytes, an unsupported board is refused,
 no resume means no application, a second send is blocked, the shared daily cap
 applies, and every attempt — including refusals — lands in `data/submissions.json`.
-```
+
+`npm run test:harvest` is the same idea for reading job pages: it drives the
+LinkedIn and Naukri scrapers over fixtures shaped like their real markup, and
+asserts what must *not* happen — no company invented from a URL slug, no salary
+read at the wrong scale, no card text leaking into the title, no `about:blank`
+urls, and duplicate cards collapsing to one row.
 
 The e2e run boots its own server against a throwaway `DATA_DIR`, so it never
 touches your real profile.
@@ -205,6 +214,7 @@ it. `composeApplication({ useInsights: false })` turns the nudge off entirely.
 | **Greenhouse boards** | no | full public JSON for thousands of tech companies | board slug from any `boards.greenhouse.io/<slug>` URL |
 | **Lever postings** | no | same for Lever customers (`api.lever.co/v0/postings/<org>`) | org slug from a Lever-hosted careers page |
 | **GitHub Jobs archive** | no | ~19k historical tech postings, no signup | works as-is (needs `api.github.com`) |
+| **Naukri** (unofficial) | no | their own search endpoint, then server-rendered HTML — undocumented and behind an anti-bot challenge, so expect it to break | works as-is; falls back to Settings → Import |
 | **Demo corpus** | no | 16 realistic postings incl. deliberately bad ones | works as-is |
 
 Credentials can live in `data/settings.json` (Settings → Sources) or env vars:
@@ -222,11 +232,52 @@ slugs (live, exact, structured, no key) + Adzuna with `country=in`.
 > only), so *live* fetches fail here by design and the UI says so in the error.
 > On your own machine or a VPS they return real postings.
 
+### Why LinkedIn and Naukri go through Import instead
+
+**LinkedIn has no public jobs API.** Its Jobs API is partner OAuth, granted to
+integrators under commercial agreements — there is no "personal token" that reads
+search results. Scraping the website from a server is explicitly against their
+ToS and is the fastest way to lose the account that *is* your professional
+identity. So this app does not do it, and no configuration will make it do it.
+
+What it does instead: the extension reads the job cards **on the page you already
+have open, in your own logged-in session**, and posts them to ApplyFlow's import
+route. That is not a workaround for weakness, it is the only honest path — it
+defeats nothing because you are the visitor. The same route accepts pasted JSON,
+which is how you import from anything else (an ATS board, a newsletter, a raw
+Naukri response):
+
+```bash
+curl -X POST localhost:3000/api/jobs/import -H 'content-type: application/json' -d '{
+  "source": "linkedin",
+  "jobs": [{ "title": "Senior Backend Engineer", "companyName": "Zerodha",
+             "location": "Bengaluru", "url": "https://www.linkedin.com/jobs/view/4123456789/",
+             "salary": "₹30 - ₹45 Lakhs p.a.", "skills": ["Java", "Kafka"] }]
+}'
+# → {"imported":1,"skipped":0,"total":19,"bySource":{"demo":16,"linkedin":2,"naukri":1}}
+```
+
+A row needs only a `title` and a `url`; everything else is mapped from whatever
+name the source used, and unknown values stay null rather than being guessed.
+Because both paths run through one normaliser
+([`server/lib/harvest.mjs`](server/lib/harvest.mjs)), imported jobs get scored,
+written up, tailored and pre-filled exactly like fetched ones — there is no
+"imported job" code path downstream.
+
+**Naukri** is the middle case: no public API, but the site's own search endpoint
+and its server-rendered HTML are readable. The `naukri` source tries both, then
+fails *loudly* with the import path named in the error, because a fetcher that
+silently returns `[]` on a 403 is how a matcher ends up reporting "no jobs in
+Bengaluru" for weeks.
+
 ### Add a source
 
-Drop a file that exports `async (cfg) => normalizedJob[]` in `server/lib/ingest.mjs`
-(see `SOURCES`), add one entry, and the UI, the runner, the caps and the exports
-all pick it up automatically. Normalized shape:
+Add an `async (cfg) => normalizedJob[]` function to `server/lib/ingest.mjs` and
+one entry to its `SOURCES` registry — the UI, the runner, the caps, `/api/meta`
+and the exports all pick it up from there, with no client change. Set
+`volatile: true` if the upstream can change or block you without notice (that is
+what makes Settings show an honest "may be blocked" hint). Normalized shape,
+defined once in `server/lib/harvest.mjs` so the browser scrapers produce it too:
 
 ```js
 { extId, source, title, company, location, remote, url, description,
@@ -277,6 +328,15 @@ Greenhouse, Lever, Ashby and Workable forms outright; `data-qa-field="…"` pins
 anything obfuscated. Captcha, password, OTP, SSN, bank, "marketing emails" and
 signature controls are hard-refused. Already-filled fields are never
 overwritten. It never submits — by construction, not by configuration.
+
+It is also the harvester. The **Harvest** tab holds your ApplyFlow address and one
+button that reads the job cards on the current page and posts them to
+`/api/jobs/import` — which is how LinkedIn jobs get in without scraping LinkedIn
+from a server (see [Job sources](#job-sources)). Read-only by the same rule that
+keeps it from submitting: it parses visible cards, clicks nothing, and its manifest
+asks for no cookie or auth permission — only `storage`, `activeTab`, `scripting`
+and `notifications`. Use **read only (no import)** first if you want to see what a
+page would have produced.
 
 ---
 

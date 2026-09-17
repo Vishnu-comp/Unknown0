@@ -88,6 +88,21 @@ const cases = {
   ResumeTab: <ResumeTab resume={resume} setResume={noop} refresh={noop} busy={false} />,
   ResumeTabEmpty: <ResumeTab resume={null} setResume={noop} refresh={noop} busy={false} />,
   JobsTab: <JobsTab jobs={jobs} meta={meta} refresh={noop} busy={false} setBusy={noop} />,
+  JobsTabHarvested: (
+    <JobsTab
+      jobs={[
+        /* exactly the shape the browser harvester produces: full-ISO postedAt (not a
+           date-only string), a withheld company, pay stated but unparseable, and only
+           the top of a range. Each one used to render wrong. */
+        { ...jobs[0], id: 'job_h1', company: 'Company withheld', salaryMin: null, salaryMax: null, salaryText: '₹18 LPA', postedAt: new Date(Date.now() - 2 * 864e5).toISOString(), source: 'naukri', app: null },
+        { ...jobs[1], id: 'job_h2', company: 'Zerodha', salaryMin: null, salaryMax: 4500000, salaryText: null, postedAt: '2026-09-15', source: 'linkedin', app: null },
+      ]}
+      meta={meta}
+      refresh={noop}
+      busy={false}
+      setBusy={noop}
+    />
+  ),
   JobsTabEmpty: <JobsTab jobs={[]} meta={meta} refresh={noop} busy={false} setBusy={noop} />,
   AppsTab: <AppsTab apps={apps} stats={{ total: 1, byStatus: { ready: 1 }, avgScore: 91, today: 3 }} pipeline={meta.pipeline} meta={meta} refresh={noop} busy={false} setBusy={noop} />,
   AppsTabEmpty: <AppsTab apps={[]} stats={{ total: 0, byStatus: {}, avgScore: 0, today: 0 }} pipeline={meta.pipeline} meta={meta} refresh={noop} busy={false} setBusy={noop} />,
@@ -129,7 +144,12 @@ for (const [name, el] of Object.entries(cases)) {
       JobModalIntel: ['job intel', 'On-call / ownership', 'tailored resume for this posting', 'bullets ranked', '4/11 signals', '93', 'Grafana', 'direct submit'],
       JobModalIntelTrim: ['job intel'],
       JobsTab: ['api-apply'],
+      /* '2d ago' rather than a date: the marker that proves a full-ISO postedAt
+         rendered as a real age. "🗓 —" was the bug this case exists to catch —
+         it came from `postedAt + 'T00:00:00Z'` producing an unparseable string. */
+      JobsTabHarvested: ['needs a click', '₹18 LPA', 'naukri', 'linkedin', '2d ago'],
       SettingsTabSubmitOn: ['Direct ATS submit', 'what it will never do'],
+      SettingsTab: ['Import jobs', 'has a public jobs API', 'partner-OAuth', 'use sample'],
     }[name];
     for (const m of markers || []) if (!html.includes(m)) throw new Error(`missing "${m}" in render`);
     if (name === 'JobModalIntel' && !/read the posting|loading/.test(html)) {

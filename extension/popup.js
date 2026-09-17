@@ -5,9 +5,14 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const state = { pack: null, batch: null };
 
 async function load() {
-  const { pack, autoOnOpen, log } = await chrome.storage.local.get(['pack', 'autoOnOpen', 'log']);
+  const { pack, autoOnOpen, log, serverUrl, harvestLimit } = await chrome.storage.local.get(['pack', 'autoOnOpen', 'log', 'serverUrl', 'harvestLimit']);
   state.pack = pack || null;
   $('#autoOnOpen').checked = Boolean(autoOnOpen);
+  /* The address is remembered here rather than hardcoded: dev runs on :3000, but a
+     tunnel or a box on the LAN needs a different host, and the content script reads
+     the same key. */
+  $('#serverUrl').value = serverUrl || '';
+  $('#harvestLimit').value = harvestLimit || 25;
   render();
   $('#log').innerHTML = (log || []).map((l) => `<div>${l}</div>`).join('') || '<div>no actions yet</div>';
 }
@@ -82,7 +87,7 @@ async function send(msg) {
 $$('.tabs button').forEach((b) =>
   b.addEventListener('click', () => {
     $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
-    ['apply', 'pack', 'log', 'about'].forEach((t) => ($('#tab-' + t).hidden = t !== b.dataset.t));
+    ['apply', 'pack', 'harvest', 'log', 'about'].forEach((t) => ($('#tab-' + t).hidden = t !== b.dataset.t));
   })
 );
 
@@ -104,7 +109,7 @@ $('#survey').addEventListener('click', async () => {
   const rows = (r?.rows || []).map((x) => `<div class="${x.key ? 'ok' : 'muted'}">${x.key ? '✓' : '·'} ${esc(x.label)} → ${x.key || '<i>unmapped</i>'} <span class="muted">${esc(x.value)}</span></div>`).join('');
   box.innerHTML = rows || '<div>no inputs found on this page</div>';
   $$('.tabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === 'log'));
-  ['apply', 'pack', 'about'].forEach((t) => ($('#tab-' + t).hidden = true));
+  ['apply', 'pack', 'harvest', 'about'].forEach((t) => ($('#tab-' + t).hidden = true));
   $('#tab-log').hidden = false;
 });
 
@@ -182,6 +187,61 @@ $('#dlLetter').addEventListener('click', () => {
   a.download = `cover-letter-${(state.pack.job?.company || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`;
   a.click();
   pushLog('downloaded cover letter');
+});
+
+/* ------------------------------- harvest (read) ------------------------------ */
+
+function hstat(msg, kind) {
+  const el = $('#harvest-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = kind === 'bad' ? 'warn' : kind === 'good' ? 'ok' : 'muted';
+}
+
+async function saveServer() {
+  const v = $('#serverUrl').value.trim().replace(/\/+$/, '');
+  if (v && !/^https?:\/\//i.test(v)) {
+    $('#server-status').textContent = 'include http:// or https://';
+    $('#server-status').className = 'warn';
+    return false;
+  }
+  await chrome.storage.local.set({ serverUrl: v });
+  $('#server-status').textContent = v ? 'saved' : 'cleared → content script default (127.0.0.1:3000)';
+  $('#server-status').className = v ? 'ok' : 'muted';
+  return true;
+}
+
+$('#saveServer').addEventListener('click', saveServer);
+$('#serverUrl').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') saveServer();
+});
+
+$('#harvestPush').addEventListener('click', async () => {
+  if (!$('#serverUrl').value.trim() && !(await chrome.storage.local.get('serverUrl')).serverUrl) {
+    if (!confirm('No ApplyFlow address set — use http://127.0.0.1:3000?')) return;
+  }
+  if (!(await saveServer())) return hstat('fix the server address first', 'bad');
+  const limit = Math.min(50, Math.max(1, Number($('#harvestLimit').value) || 25));
+  await chrome.storage.local.set({ harvestLimit: limit });
+  const btn = $('#harvestPush');
+  btn.disabled = true;
+  hstat('reading the page…');
+  const r = await send({ type: 'harvestPush', baseUrl: $('#serverUrl').value.trim().replace(/\/+$/, ''), limit });
+  btn.disabled = false;
+  if (r?.error) hstat(r.error, 'bad');
+  else hstat(`read ${r.scraped} card(s) on ${r.source} · ${r.imported} new, ${r.skipped || 0} already there · corpus ${r.total}`, 'good');
+  pushLog(`harvest ${r?.source || '?'} → +${r?.imported ?? 0}/${r?.scraped ?? 0}${r?.error ? ' · ' + r.error : ''}`);
+});
+
+/* Preview first. Importing a page whose cards were parsed badly is how a job list
+   fills up with "Untitled role @ Company withheld" rows, so "read only" exists. */
+$('#harvestPeek').addEventListener('click', async () => {
+  const limit = Math.min(50, Math.max(1, Number($('#harvestLimit').value) || 25));
+  hstat('reading the page…');
+  const r = await send({ type: 'harvest', limit });
+  if (r?.error) return hstat(r.error, 'bad');
+  hstat(`${r.jobs.length} card(s) from ${r.source}: ${r.jobs.slice(0, 3).map((j) => `${j.title} @ ${j.company}`).join(' · ')}${r.jobs.length > 3 ? ' …' : ''} — nothing posted`, 'good');
+  pushLog(`harvest preview → ${r.jobs.length} on ${r.source} (not posted)`);
 });
 
 load();

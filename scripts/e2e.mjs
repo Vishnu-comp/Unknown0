@@ -124,6 +124,22 @@ console.log('\n2b. real file uploads (PDF + DOCX via multipart)');
   check('PDF → role/company/dates correct', (pdf.data.resume?.summary?.experience || [])[0]?.company === 'Nimbus Labs' && (pdf.data.resume?.summary?.experience || [])[0]?.start === '2023-03');
   check('PDF → skill mining works', (pdf.data.resume?.summary?.skills || []).length >= 15, `${pdf.data.resume?.summary?.skills?.length} skills`);
 
+  {
+    const { extractText, parseResume, stripMarkdownLinks } = await import(new URL('../server/lib/resume.mjs', import.meta.url).href);
+    const raw = await extractText(fs.readFileSync(new URL('sample-resume.pdf', dir)), 'application/pdf', 'sample-resume.pdf');
+    const txt = fs.readFileSync(new URL('sample-resume.txt', dir), 'utf8');
+    check('PDF keeps resume typography (em dash, bullets) so it exercises the same parser path as a real file', /—/.test(raw) && /•/.test(raw), `${(raw.match(/—/g) || []).length} em dashes, ${(raw.match(/•/g) || []).length} bullets`);
+    const fromPdf = parseResume(raw);
+    const fromTxt = parseResume(txt);
+    const txtBullets = JSON.stringify(parseResume(fs.readFileSync(new URL('sample-resume.txt', dir), 'utf8')).experience.map((e) => e.bullets.length));
+    check('PDF → bullet counts match the .txt it was generated from', JSON.stringify((pdf.data.resume?.summary?.experience || []).map((e) => e.bullets.length)) === txtBullets, `${JSON.stringify((pdf.data.resume?.summary?.experience || []).map((e) => `${e.company}:${e.bullets.length}`))}`);
+    check('PDF and TXT agree on companies, titles and education', JSON.stringify(fromPdf.experience.map((e) => [e.company, e.title.split(' -> ')[0].split(' → ')[0]])) === JSON.stringify(fromTxt.experience.map((e) => [e.company, e.title.split(' -> ')[0].split(' → ')[0]])), fromPdf.experience.map((e) => e.company).join('+'));
+    check('PDF and TXT agree on skill + education counts', fromPdf.skills.length === fromTxt.skills.length && fromPdf.education.length === fromTxt.education.length, `${fromPdf.skills.length}/${fromTxt.skills.length} skills`);
+    const md = parseResume('A Person\n[a@b.com](mailto:a@b.com) | [linkedin.com/in/some-one](https://linkedin.com/in/some-one)\n\nEXPERIENCE\n[Acme Corp](https://acme.example) — Software Engineer, Bengaluru | Jan 2024 – Present\n- Shipped the payments relay cutting failures by 40% using Spring Boot\n');
+    check('markdown-wrapped links from a LaTeX PDF do not become the contact fields', md.contact.email === 'a@b.com' && !md.contact.email?.includes('](') && !/\[/.test(md.contact.linkedin || ''), md.contact.linkedin);
+    check('a link around a company name resolves to the name, not its homepage', md.experience[0]?.company === 'Acme Corp', JSON.stringify(md.experience[0]?.company));
+    check('unwrap leaves prose and bare URLs alone', stripMarkdownLinks('no links here, just https://x.dev/a and (parens)') === 'no links here, just https://x.dev/a and (parens)');
+  }
   const docBuf = fs.readFileSync(new URL('sample-resume.docx', dir));
   const doc = await upload(new Blob([docBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), 'resume.docx');
   check('DOCX upload parsed (zip + xml path)', doc.status === 200 && (doc.data.resume?.summary?.chars || 0) > 1200, `${doc.data.resume?.summary?.chars} chars`);
@@ -261,7 +277,40 @@ const sweAgain = r1.data.jobs.find((x) => x.id === swe.id);
 check('scoring is deterministic for identical input', sweRescored.match.score === sweAgain.match.score, `swe ${sweRescored.match.score} = ${sweAgain.match.score}`);
 await j('/api/profile', { method: 'PUT', body: JSON.stringify(p0.data.profile) });
 
-console.log('\n8. error handling & UI');
+console.log('\n8. import route (the one funnel for paste + extension harvest)');
+const beforeImport = (await j('/api/jobs')).data.count;
+const liRow = {
+  jobs: [
+    { title: 'Senior Backend Engineer', companyName: 'Zerodha', location: 'Bengaluru, Karnataka, India', url: 'https://www.linkedin.com/jobs/view/4123456789/?trk=search', salary: '₹30 - ₹45 Lakhs p.a.', experience: '4-7 Yrs', skills: ['Java', 'Spring Boot', 'Kafka'] },
+    { title: 'Staff SRE', company: 'Wise', location: 'Remote', url: 'https://www.linkedin.com/jobs/view/9876543210/' },
+  ],
+  source: 'linkedin',
+};
+const imp = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify(liRow) });
+check('POST /api/jobs/import accepts a {jobs:[…]} envelope', imp.status === 200 && imp.data.imported === 2, JSON.stringify(imp.data).slice(0, 110));
+check('imported rows land in the same store as fetched ones', (await j('/api/jobs')).data.count >= beforeImport + 2, `${beforeImport} → ${(await j('/api/jobs')).data.count}`);
+check('source is recorded, so provenance survives', imp.data.bySource?.linkedin >= 2, JSON.stringify(imp.data.bySource));
+const afterFirst = (await j('/api/jobs')).data.count;
+const again = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify(liRow) });
+check('re-importing the same cards dedupes by url/id instead of duplicating', again.status === 200 && (await j('/api/jobs')).data.count === afterFirst, `${afterFirst} → ${(await j('/api/jobs')).data.count}`);
+const listed = await j('/api/jobs?q=Zerodha');
+const importedJob = listed.data.jobs.find((x) => /linkedin\.com\/jobs\/view\/4123456789/.test(x.url || ''));
+check('an imported job is scored like any other', !!importedJob && Number.isFinite(importedJob.match?.score), importedJob ? `score ${importedJob.match.score} (${importedJob.match.grade})` : 'not found');
+check('salary from an Indian range is scaled, not read as lakhs-of-nothing', importedJob?.salaryMin === 3000000 && importedJob?.salaryMax === 4500000, `${importedJob?.salaryMin}-${importedJob?.salaryMax}`);
+check('the tracking query string is stripped so the id is stable', importedJob?.url === 'https://www.linkedin.com/jobs/view/4123456789', String(importedJob?.url));
+const naukriShape = await j('/api/jobs/import', {
+  method: 'POST',
+  body: JSON.stringify({ source: 'naukri', data: { jobDetails: [{ jobId: 555000111, title: 'Java Backend Engineer', companyName: 'Dynpro Technologies', location: 'Bengaluru', salary: '12-18 LPA', experience: '2-5 Yrs', skills: ['Java', 'MySQL'], serpActionUrl: '/job-listings-java-backend-engineer-dynpro-bengaluru-555000111?src=SearchResult' }] } }),
+});
+check('a raw Naukri search response is accepted as-is', naukriShape.status === 200 && naukriShape.data.imported === 1, JSON.stringify(naukriShape.data).slice(0, 90));
+const nk = (await j('/api/jobs?q=Dynpro')).data.jobs.find((x) => /555000111/.test(x.url || ''));
+check('Naukri url + salary normalised through the same path', nk?.salaryMin === 1200000 && /naukri\.com\/job-listings-/.test(nk?.url || ''), `${nk?.salaryMin}-${nk?.salaryMax}`);
+const junk = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify({ jobs: [{ location: 'Bengaluru' }, { foo: 1 }] }) });
+check('rows with no title/url are refused, not half-imported', junk.status === 400, (junk.data.error || '').slice(0, 80));
+const empty = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify({}) });
+check('an empty body is refused with a shape hint', empty.status === 400 && /jobs/.test(empty.data.error || ''), (empty.data.error || '').slice(0, 70));
+
+console.log('\n9. error handling & UI');
 const noSource = await j('/api/jobs/fetch', { method: 'POST', body: JSON.stringify({ sources: ['adzuna'] }) });
 check('bad/absent credentials fail loudly with a message', noSource.status === 400 && /Nothing came back|Errors/.test(noSource.data.error || ''), (noSource.data.error || '').slice(0, 90));
 const missing = await j('/api/jobs/does-not-exist');
@@ -288,7 +337,7 @@ check('css served', styles.status === 200 && cssBytes > 1000, `${(cssBytes / 102
 const health = await j('/healthz');
 check('healthcheck', health.data.ok === true);
 
-console.log('\n9. filter/search API');
+console.log('\n10. filter/search API');
 const filtered = await j('/api/jobs?min=70&sort=score');
 check('min-score filter', filtered.data.jobs.every((x) => x.match.score >= 70), `${filtered.data.count} ≥70`);
 const searched = await j('/api/jobs?q=kubernetes');
@@ -296,7 +345,7 @@ check('text search', searched.data.count >= 0 && searched.data.jobs.every((x) =>
 const statusNew = await j('/api/jobs?status=new');
 check('status=new excludes drafted jobs', statusNew.data.jobs.every((x) => !x.app), `${statusNew.data.count} open`);
 
-console.log('\n10. resume tailoring (no fabrication) + posting intelligence');
+console.log('\n11. resume tailoring (no fabrication) + posting intelligence');
 const jobsAll = (await j('/api/jobs')).data.jobs;
 const ghJob = jobsAll.find((x) => /greenhouse\.io/i.test(x.url || '')) || jobsAll[0];
 const otherJob = jobsAll.find((x) => x.id !== ghJob.id && x.match.score > 30);
@@ -338,7 +387,7 @@ const weak = jobsAll.filter((x) => x.match.score < 25);
   check('a weak posting is not flattered into "good"', rw.every((r) => r.data.research.insights.length === 0 || r.data.research.verdict !== 'good' || r.data.research.positives.length > 0), rw.map((r) => r.data.research.verdict).join(','));
 }
 
-console.log('\n11. direct ATS submit (against a local mock of the public API)');
+console.log('\n12. direct ATS submit (against a local mock of the public API)');
 const draftJob = await j('/api/apps/draft', { method: 'POST', body: JSON.stringify({ jobIds: [ghJob.id], force: true }) });
 const appsNow = (await j('/api/apps')).data.apps;
 const ghApp = appsNow.find((a) => a.jobId === ghJob.id);

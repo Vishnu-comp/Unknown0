@@ -76,6 +76,7 @@ before `npm start`, or the browser gets a blank page.
 node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15
 node scripts/load-resume.mjs --resume=resume.txt --floor=1800000
 node scripts/load-resume.mjs --resume=resume.txt --base=http://127.0.0.1:3100   # app on another port
+node scripts/load-resume.mjs --resume=~/Downloads/x.pdf --dump=/tmp/resume.txt   # just show extracted text
 ```
 
 Flags (all optional except `--resume`):
@@ -88,6 +89,7 @@ Flags (all optional except `--resume`):
 | `--floor=<INR>` | salary floor. **Left unset on purpose** if you don't pass it — a guessed expectation answers a real form with a real lie, and the score follows it |
 | `--field=<id>` | override the target field (e.g. `data_science`) |
 | `--remote` | set `openToRemote: true` |
+| `--dump=<path>` | write the extracted text and exit (`--dump=stdout` prints only) — how to tell whether a mis-parse is the PDF's fault or the parser's |
 | `--seed` | force a re-seed of the 16 demo postings. An **empty** store gets them anyway; a populated one is left alone unless you pass this |
 
 The app must already be running (it calls the HTTP API — there is no direct
@@ -106,8 +108,9 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 5 suites, ~5 seconds, no network
-npm run test:e2e       # 111 checks; boots its own server on a random port :3210-3299
+npm test               # 6 suites, ~6 seconds, no network
+npm run test:harvest   # harvester alone (jsdom fixtures for the LinkedIn/Naukri scrapers)
+npm run test:e2e       # 129 checks; boots its own server on a random port :3210-3299
 npm run test:all       # both
 ```
 
@@ -115,12 +118,15 @@ npm run test:all       # both
 |---|---:|---|
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
-| `test:render` — `scripts/render.test.mjs` | 14 | every tab in every state renders without throwing |
+| `test:render` — `scripts/render.test.mjs` | 15 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:harvest` — `scripts/harvest.test.mjs` | 82 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
-| `test:e2e` — `scripts/e2e.mjs` | 111 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → tailoring → intelligence → submit → exports |
+| `test:e2e` — `scripts/e2e.mjs` | 129 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**248 checks, plus 14 render probes = 262.** Current tree: all green.
+**250 + 82 harvester + 15 render = 358 checks, plus 129 end-to-end.** Current tree: all green
+(run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
+the version guard keep Node 18.0 supported — see §0).
 
 Useful variants:
 
@@ -157,8 +163,18 @@ needs no host permission for your ApplyFlow server and works when the API is
 bound to localhost only. It types into the form; **you** press Submit. Safety
 rules and the per-board behaviour are in [`extension/README.md`](extension/README.md).
 
+**To get real postings in** (step 3' — no pack needed): open a LinkedIn search
+results page or a Naukri search page, then extension icon → **Harvest** → set the
+server address → *read only (no import)* → *read cards here → import*. It posts to
+the same `POST /api/jobs/import` the Settings → Import box uses. If you reload
+`server/lib/harvest.mjs`, re-run `npm run build` and reload the extension, or the
+page-side copy goes stale.
+
 Firefox: `about:debugging#/runtime/this-firefox` → Load Temporary Add-on →
-pick `extension/manifest.json`.
+pick `extension/manifest.json`. The extension's fill and harvest paths both
+`import()` their `lib/*.mjs` at runtime; if that ever fails on a given browser,
+`content.js` falls back to its built-in field map for filling and reports a clear
+error for harvest — in which case use the paste path in Settings → Import.
 
 ---
 
@@ -177,6 +193,21 @@ or put them in **Settings → Sources** (stored in `data/settings.json`).
 Greenhouse/Lever board slugs need no key at all: `greenhouseBoards: ["zerodha","cred"]`,
 `leverCompanies: ["postman"]`. Auto-refresh from Settings → **run auto-apply**;
 cron the same way with `POST /api/run` if you'd rather not keep the UI open.
+
+**Naukri is different from those five, and deliberately so.** It has no public API:
+what exists is the search endpoint the site itself calls, plus server-rendered HTML,
+both behind an anti-bot challenge. The `naukri` source tries the endpoint, then the
+HTML, and if neither yields rows it raises an error that *names* the fallback path
+rather than returning an empty list. Do not expect it to work from a datacenter IP.
+
+**LinkedIn has no server-side path at all, by decision.** Its Jobs API is partner
+OAuth, and scraping the site from a server violates the ToS of the one account you
+least want to lose. The only supported route is the extension reading a page you
+already have open in your own session, or pasting JSON into Settings → Import.
+Both land in the same normaliser, so scoring, letters, tailoring and prefill behave
+identically for imported rows — verified by `test:harvest` and the e2e import
+section (an imported job gets a score, a stable dedupe id, and a salary parsed at
+the right scale).
 
 A source that can't connect fails with its own error text in the UI — never an
 empty list dressed up as "no matches".
@@ -206,7 +237,7 @@ because it assumes your laptop or a private box.
 Handy endpoints once it's up (`curl` works, there's no auth to script around):
 
 ```bash
-curl localhost:3000/healthz                       # ok + uptime + which dataDir
+curl localhost:3000/healthz                       # ok + process uptime + pid + node + which dataDir
 curl localhost:3000/api/meta                      # fields, sources, pipeline, which keys are set
 curl "localhost:3000/api/jobs?sort=score"         # ranked, with match + flags
 curl localhost:3000/api/profile                   # + completeness %

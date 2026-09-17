@@ -170,6 +170,22 @@ export function timeAgo(iso) {
   return d < 40 ? `${d}d ago` : new Date(iso).toLocaleDateString();
 }
 
+/**
+ * "how long ago was this posted", for whichever shape `postedAt` happens to be in.
+ * The old call site did `timeAgo(postedAt + 'T00:00:00Z')`, which is correct for the
+ * date-only strings the key'd sources produce and *broken* for a full timestamp:
+ * "2026-09-15T12:57:17.897Z" + "T00:00:00Z" parses to NaN, so every job harvested
+ * from the browser — the only path that gets live LinkedIn/Naukri postings in —
+ * rendered "🗓 —" instead of its age. Appending nothing is safe for both shapes,
+ * because Date.parse reads a bare YYYY-MM-DD fine.
+ */
+export function postedAgo(postedAt) {
+  if (!postedAt) return '—';
+  const iso = String(postedAt).includes('T') ? String(postedAt) : `${String(postedAt).slice(0, 10)}T00:00:00Z`;
+  const out = timeAgo(iso);
+  return out === '—' ? timeAgo(String(postedAt).slice(0, 10)) : out;
+}
+
 export function fmtMoney(n, cur) {
   if (!n) return null;
   const sym = { INR: '₹', USD: '$', EUR: '€', GBP: '£', SGD: 'S$', AUD: 'A$', CAD: 'C$' }[cur] || '';

@@ -182,8 +182,39 @@ function fromPlain(str, ext) {
 
 /* --------------------------- structure extraction --------------------------- */
 
+/**
+ * Many LaTeX/pandoc/online-builder PDFs render hyperlinks as literal
+ * `[label](target)` text in the content stream, so pdf.js hands us
+ * `[a@b.com](mailto:a@b.com)`. Left alone that becomes the email address, the
+ * LinkedIn URL and the GitHub link on every application form. Unwrap it: keep
+ * the URL when the label *is* the URL (contact lines), keep the label otherwise
+ * (a link around a company name should not inject the company's homepage into
+ * the resume header).
+ */
+export function stripMarkdownLinks(text) {
+  if (!text || text.indexOf('](') === -1) return text;
+  return String(text)
+    .replace(/\[([^\]\n]{0,200}?)\]\(\s*(?:<([^>\n]{1,300})>|([^\s)]{1,300}))(?:\s+"[^"\n]*")?\s*\)/g, (all, label, angle, bare) => {
+      const target = (angle || bare || '').trim();
+      const lab = (label || '').trim();
+      if (!target) return lab || all;
+      /* The label decides, not the target: a label that is itself an address
+         (email, bare host, host/path) is a contact link — keep the address so
+         the contact regexes still have something to match. A label that is a
+         word ("Shoffr", "portfolio", "here") is prose with a hyperlink, and
+         pasting https://shoffr.com into a resume's *company* field would be
+         worse than useless. */
+      const labIsAddress = lab === '' || /^[\w.+-]+@[\w.-]+\.[a-z]{2,}$|^(?:https?:\/\/|mailto:|www\.)|^[\w-]+(\.[\w-]+)+(\/[\w./%+~?=&#-]*)?$/.test(lab);
+      return labIsAddress ? target.replace(/^mailto:/i, '') : lab;
+    })
+    /* angle-bracket autolinks: <https://x.y> */
+    .replace(/<((?:https?:\/\/|mailto:)[^>\s]{4,200})>/gi, '$1');
+}
+
 export function parseResume(text) {
-  const clean = normalize(text);
+  /* unwrap [label](url) before anything else: the section splitters and the
+     contact regexes all assume the document says what it means */
+  const clean = normalize(stripMarkdownLinks(text));
   const lines = clean.split('\n').map((l) => l.trim()).filter(Boolean);
 
   /* sections */
@@ -214,7 +245,10 @@ export function parseResume(text) {
       (u) =>
         !u.toLowerCase().endsWith(emailHost) && !email.toLowerCase().includes(u.toLowerCase()) &&
         !/^(?:gmail|yahoo|outlook|hotmail|proton(?:mail)?)\./i.test(u) &&
-        !/^(?:www\.)?(?:linkedin|github|gitlab)\.com/i.test(u) &&
+        /* scheme-stripped, or "https://linkedin.com/in/x" slips through and wins
+           the portfolio slot — which then lands in resumeUrl and the letter footer */
+        !/^(?:linkedin|github|gitlab)\.com/i.test(u.replace(/^(?:https?:\/\/|www\.)/i, '')) &&
+        !/\/in\/[\w-]+$|github\.com\//i.test(u) &&
         (u.includes('/') || /\.(dev|design|app|ai|vercel\.app|netlify\.app|github\.io)$/i.test(u))
     ) || null;
   const name = lines[0] && lines[0].length <= 48 && !/@|http/.test(lines[0]) ? titleGuess(lines[0]) : null;

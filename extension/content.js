@@ -16,8 +16,14 @@
   window.__applyflow = true;
 
   let engine = null;
+  let harvest = null;
   try {
-    const [fm, fl] = await Promise.all([import(chrome.runtime.getURL('lib/fieldmap.mjs')), import(chrome.runtime.getURL('lib/fill.mjs'))]);
+    const [fm, fl, hv] = await Promise.all([
+      import(chrome.runtime.getURL('lib/fieldmap.mjs')),
+      import(chrome.runtime.getURL('lib/fill.mjs')),
+      import(chrome.runtime.getURL('lib/harvest.mjs')).catch(() => null),
+    ]);
+    harvest = hv;
     engine = { mapKey: fm.mapKey, fillDocument: fl.fillDocument, fillControl: fl.fillControl, visibleControls: fl.visibleControls, isFilled: fl.isFilled, PATTERNS: fm.PATTERNS, SELECTOR: fm.SELECTOR };
   } catch (e) {
     /* fall back to the built-in map below */
@@ -175,6 +181,37 @@
     return { ok: true, engine: 'fallback', rows: fallbackVisible().map((el) => ({ label: labelOf(el), key: fallbackKey(el), value: (el.value || '').slice(0, 34), type: el.type || el.tagName.toLowerCase() })) };
   }
 
+
+  /* ---- harvesting the page you are already looking at -----------------------
+     Read-only: no clicks, no navigation, no form writes, no cookies, no tokens.
+     The shared module (extension/lib/harvest.mjs, copied from server/lib by
+     `npm run build`) is the ONLY implementation. There is deliberately no
+     regex-over-markup fallback here: during development a regex pass produced
+     "Senior Java Engineer Acme Tech 2-5 Yrs ₹12-18 LPA" as a job title, and a
+     wrong-but-plausible job is worse than no job — it flows into a score, a
+     letter and a real application form. */
+  async function harvestHere(msg) {
+    const limit = Math.min(50, Math.max(1, Number(msg?.limit || 25)));
+    const host = location.hostname;
+    if (!harvest) return { ok: false, error: 'lib/harvest.mjs did not load — run npm run build, then reload the extension at chrome://extensions' };
+    if (host === 'www.linkedin.com' || host === 'linkedin.com') {
+      const jobs =
+        /\/jobs\/view\//.test(location.pathname) && harvest.scrapeLinkedInDetail
+          ? [harvest.scrapeLinkedInDetail(harvestDoc(), location)].filter(Boolean)
+          : harvest.scrapeLinkedIn(harvestDoc(), { limit });
+      if (jobs.length) return { ok: true, source: 'linkedin', jobs, host };
+      return { ok: false, error: 'no job cards found here — scroll the results list so LinkedIn renders them, then retry (they are lazy-loaded)' };
+    }
+    if (host.endsWith('naukri.com')) {
+      const jobs = harvest.scrapeNaukri ? harvest.scrapeNaukri(harvestDoc(), location, { limit }) : [];
+      if (jobs.length) return { ok: true, source: 'naukri', jobs, host };
+      return { ok: false, error: 'no Naukri result rows found on this page — open a /job-listings-… search URL and try again' };
+    }
+    return { ok: false, error: `this page (${host}) is not a known job-results layout — LinkedIn search/view and Naukri search are supported` };
+  }
+
+  const harvestDoc = () => document;
+
   chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     (async () => {
       try {
@@ -204,6 +241,27 @@
           }
           case 'survey':
             return respond(survey());
+          case 'harvest':
+            return respond(await harvestHere(msg));
+          case 'harvestPush': {
+            const r = await harvestHere(msg);
+            if (!r.ok) return respond(r);
+            const stored = (await chrome.storage?.local?.get?.('serverUrl'))?.serverUrl;
+            const base = (msg.baseUrl || stored || 'http://127.0.0.1:3000').replace(/\/+$/, '');
+            try {
+              const res = await fetch(`${base}/api/jobs/import`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ source: r.source, jobs: r.jobs }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) return respond({ ok: false, error: data.error || `HTTP ${res.status} from ${base}` });
+              note(`imported ${data.imported} of ${r.jobs.length} from ${location.hostname} · store now ${data.total}`, 'ok');
+              return respond({ ok: true, ...data, scraped: r.jobs.length, source: r.source });
+            } catch (e) {
+              return respond({ ok: false, error: `could not reach ApplyFlow at ${base} (${e.message}). Set the address in the popup; the app must be running.` });
+            }
+          }
           case 'clearMarks':
             document.querySelectorAll('#applyflow-panel').forEach((n) => n.remove());
             panel = null;

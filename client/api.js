@@ -78,6 +78,10 @@ export const api = {
   saveSettings: (s) => req('PUT', '/api/settings', s),
   reset: () => req('POST', '/api/reset'),
 
+  /* Paste-and-import. Rows are normalised server-side, so the payload can be a bare
+     array, {jobs:[…]} or a raw Naukri search response — see server/lib/harvest.mjs. */
+  importJobs: (body) => req('POST', '/api/jobs/import', body),
+
   exportBatchUrl: '/api/export/prefill.json',
   exportPackUrl: '/api/export/pack.md',
 };

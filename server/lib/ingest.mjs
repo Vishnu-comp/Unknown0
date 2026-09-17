@@ -23,6 +23,42 @@ async function getJson(url, headers = {}) {
   }
 }
 
+/** Text fetch for sites that answer HTML to a JSON-shaped client. */
+async function getDoc(url, headers = {}) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        /* A custom UA is what gets you a challenge page; a plain browser one with a
+           sec-fetch set gets you the real markup. This is a read of a public search
+           page on the user's behalf, so we identify honestly in Accept-Language and
+           never send cookies, tokens or credentials of any kind. */
+        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+        'accept-language': 'en-IN,en;q=0.9',
+        'sec-fetch-mode': 'no-cors',
+        'sec-fetch-site': 'none',
+        ...headers,
+      },
+      signal: ctrl.signal,
+    });
+    const body = await res.text();
+    if (res.status === 403 || res.status === 429 || /captcha|are you a human|access denied|request blocked/i.test(body.slice(0, 4000))) {
+      throw new Error(`${url.split('/')[2]} → HTTP ${res.status} anti-bot challenge. The site refused an unattended request (this is normal and will change without notice). Use "Import jobs JSON" in Settings instead: open the search page in your browser, paste the page source or the network response into the box — 30 seconds, no scraping, and it goes through the same normalizer.`);
+    }
+    if (!res.ok) throw new Error(`${url.split('/')[2]} → HTTP ${res.status}`);
+    return body;
+  } catch (e) {
+    if (/fetch failed|ECONN|ENOTFOUND|network|abort/i.test(String(e?.cause?.code || e?.message))) {
+      throw new Error(`${url.split('/')[2]} → no route from this machine (${e?.cause?.code || e.message}). If you are running ApplyFlow in a sandbox or behind an egress allowlist, that is expected — use Settings → Import jobs JSON instead.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 function base(job) {
   return {
     extId: job.id,
@@ -206,6 +242,61 @@ async function lever(cfg) {
   return out;
 }
 
+/* ---------------------------------- Naukri ---------------------------------- */
+/* No public API exists for this — see https://parse.bot / vendor docs: what people
+   call the "Naukri API" is their own internal search endpoint, undocumented and
+   under active anti-bot work. We try their JSON endpoint first and the rendered
+   page second, and we fail LOUDLY with the import fallback named, because a source
+   that silently returns [] turns a matcher into "no jobs in Bengaluru" for a week. */
+async function naukri(cfg) {
+  const { normalizeNaukriPayload, parseNaukriHtml, naukriSearchUrl } = await import('./harvest.mjs');
+  const pages = Number(cfg.pages || 1);
+  const out = [];
+  const problems = [];
+  for (let page = 1; page <= Math.min(Math.max(1, pages), 5); page++) {
+    const { url, jsonUrl } = naukriSearchUrl({
+      keyword: cfg.what || (cfg.profile?.targets?.titleKeywords || [])[0] || 'software engineer',
+      location: cfg.where || cfg.profile?.location?.city || '',
+      page,
+      experience: cfg.experience ?? cfg.profile?.targets?.experienceYears,
+      salary: cfg.salary,
+      freshness: cfg.freshness ?? cfg.jobAge,
+      workMode: cfg.workMode,
+    });
+    let rows = [];
+    try {
+      rows = normalizeNaukriPayload(JSON.parse(await getDoc(jsonUrl, { accept: 'application/json' })));
+    } catch (e) {
+      problems.push(`json: ${e.message.split('\n')[0]}`);
+      try {
+        rows = parseNaukriHtml(await getDoc(url));
+      } catch (e2) {
+        problems.push(`html: ${e2.message.split('\n')[0]}`);
+      }
+    }
+    if (!rows.length) problems.push(`page ${page}: 0 jobs`);
+    out.push(...rows);
+  }
+  if (!out.length) throw new Error(`naukri: nothing parsed. ${problems.join(' | ')}`);
+  return out.slice(0, Number(cfg.maxJobs || 120));
+}
+
+/**
+ * Import for anything we cannot fetch programmatically — above all LinkedIn, whose
+ * official Jobs API is partner OAuth only, so a self-hosted app can only ever read
+ * the page the user is already viewing (see extension/lib/harvest.mjs).
+ * Accepts a bare array or a { jobs } envelope, in LinkedIn/Naukri/vendor shapes or
+ * our own normalized shape; every field is optional except a title and a url.
+ */
+export async function normalizeImport(input, sourceHint = 'imported') {
+  const { normalizeJob, normalizeNaukriPayload } = await import('./harvest.mjs');
+  const rows = Array.isArray(input) ? input : Array.isArray(input?.jobs) ? input.jobs : Array.isArray(input?.data?.jobDetails) ? null : [];
+  if (!rows) return normalizeNaukriPayload(input); // a raw Naukri search response
+  return rows
+    .map((r) => normalizeJob(r, sourceHint || r?.source || 'imported'))
+    .filter((j) => j.title && j.title !== 'Untitled role' && j.url);
+}
+
 /* ----------------------------------- demo ---------------------------------- */
 async function demo() {
   const mod = await import('../data/demoJobs.mjs');
@@ -219,6 +310,12 @@ export const SOURCES = {
   jooble: { label: 'Jooble (career-page aggregation)', needsKey: true, run: jooble },
   greenhouse: { label: 'Greenhouse ATS boards', needsKey: false, run: greenhouse },
   lever: { label: 'Lever ATS postings', needsKey: false, run: lever },
+  naukri: {
+    label: 'Naukri (unofficial — no public API, may be blocked; see Settings → Import jobs JSON)',
+    needsKey: false,
+    run: naukri,
+    volatile: true,
+  },
 };
 
 /**
