@@ -155,7 +155,11 @@ export function buildCandidate(profile, job, tailoredLetter) {
       : [],
     applications: [{ offsite: false, job: { id: null, name: job?.title || '' }, status: 'new' }],
     answers: [],
-    consent_for_data_processing: profile.boolAnswers?.consentDataProcessing !== false,
+    /* Was `!== false`, which is fail-OPEN: an unset consent was sent as true, so a
+       first-ever direct submit asserted data-processing consent the user never gave.
+       Now the key is only present when the user actually ticked it, and the send is
+       blocked below if the board's own form demands it. */
+    ...(profile.boolAnswers?.consentDataProcessing === true ? { consent_for_data_processing: true } : {}),
   };
   if (expected) c.applications[0].salary_information = { expected: String(expected), currency: profile.salary?.currency || 'INR' };
   if (tailoredLetter) c.cover_letter = tailoredLetter;

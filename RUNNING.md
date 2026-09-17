@@ -93,10 +93,15 @@ Flags (all optional except `--resume`):
 |---|---|
 | `--resume=<path>` | `.pdf`, `.docx`, `.txt`, `.md` — parsed by the same code path as the web UI. `~` is expanded here, so `--resume=~/Downloads/r.pdf` is fine |
 | `--base=<url>` | app URL, default `http://127.0.0.1:3000`. Also reads `APPLYFLOW_URL` |
-| `--notice=<weeks>` | your notice period, feeds "when can you start" answers |
+| `--notice=<weeks>` | your notice period, feeds "when can you start" answers. **Unset if you omit it** — it used to default to a fortnight, a commitment nobody made |
 | `--floor=<INR>` | salary floor. **Left unset on purpose** if you don't pass it — a guessed expectation answers a real form with a real lie, and the score follows it |
 | `--field=<id>` | override the target field (e.g. `data_science`) |
-| `--remote` | set `openToRemote: true` |
+| `--remote` | set `remotePreference: 'remote'` |
+
+Nothing else is filled in for you: work authorisation, sponsorship, background-check and
+data-processing consent, current location and salary expectation stay **unset**, because a
+resume cannot state them and the Profile tab flags each one until you do. They used to be
+defaulted — including `consentBackgroundCheck: true`, which is an assertion about you.
 | `--dump=<path>` | write the extracted text and exit (`--dump=stdout` prints only) — how to tell whether a mis-parse is the PDF's fault or the parser's |
 | `--seed` | load the fixed test corpus instead of fetching. Only works if the server was started with `ALLOW_FIXTURE_SEED=1`; otherwise it refuses and points at the real paths (`/api/jobs/fetch`, `/api/jobs/import`) |
 
@@ -116,10 +121,10 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 387 checks, ~6 seconds
+npm test               # 6 suites, 397 checks, ~6 seconds
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
-npm run test:e2e       # 129 checks; boots its own server on a random port :3210-3299
+npm run test:e2e       # 132 checks; boots its own server on a random port :3210-3299
 npm run test:all       # both
 ```
 
@@ -127,13 +132,13 @@ npm run test:all       # both
 |---|---:|---|
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
-| `test:render` — `scripts/render.test.mjs` | 15 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
-| `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:render` — `scripts/render.test.mjs` | 18 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
+| `test:features` — `scripts/features.test.mjs` | 105 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:harvest` — `scripts/harvest.test.mjs` | 119 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
-| `test:e2e` — `scripts/e2e.mjs` | 129 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
+| `test:e2e` — `scripts/e2e.mjs` | 132 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 119 + 15 + 89 + 76 = 387 checks, plus 129 end-to-end = 516.** Current tree: all green
+**53 + 30 + 121 + 18 + 105 + 76 = 397 checks, plus 132 end-to-end = 529.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -252,8 +257,20 @@ curl "localhost:3000/api/jobs?sort=score"         # ranked, with match + flags
 curl localhost:3000/api/profile                   # + completeness %
 curl localhost:3000/api/export/pack.md            # letters + answers + tailored resumes
 curl localhost:3000/api/export/prefill.json       # the extension batch payload
-curl -X POST localhost:3000/api/apps/draft \
-  -H 'content-type: application/json' -d '{"jobIds":["demo_3"],"force":true}'   # ids keep the demo_ prefix from the fixture file
+# get listings in when the network is blocked: paste what a real page gives you
+curl -sX POST localhost:3000/api/jobs/import -H 'content-type: application/json' -d '{
+  "source": "naukri",
+  "jobs": [{ "title": "Staff Backend Engineer", "companyName": "Razorpay",
+             "location": "Bengaluru", "experience": "7-11 Years",
+             "salary": "₹45 - ₹65 Lakhs p.a.", "postedAt": "3 days ago",
+             "url": "https://www.naukri.com/job-listings-staff-backend-bengaluru-44120998" }]
+}'   # → {"imported":1,"skipped":0,"total":1,"bySource":{"naukri":1}}
+
+# then draft against whatever is actually in the store (ids are derived from the
+# url/source, so read one rather than assuming it — `demo_…` ids only exist in fixtures)
+curl -sX POST localhost:3000/api/apps/draft \
+  -H 'content-type: application/json' \
+  -d "{\"jobIds\":[\"$(curl -s 'localhost:3000/api/jobs?sort=score' | python3 -c 'import json,sys;print(json.load(sys.stdin)["jobs"][0]["id"])')\"],\"force\":true}" 
 ```
 
 Per-app: `/api/apps/:id/tailored.txt`, `/api/apps/:id/prefill`,

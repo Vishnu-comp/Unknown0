@@ -98,52 +98,51 @@ if (args.dump) {
 
 if (!parsed.name) console.log('· note: no name line detected — set fullName on the Profile tab');
 
-/* Start from what the parser can defend, then add only what it cannot know. */
+/* Start from what the parser can defend, and add only what the flags state.
+   This block used to write "authorizedToWork: true", "consentBackgroundCheck: true",
+   "workAuth: ['India']", a Bengaluru address and a 15-day notice period for whoever ran
+   it — a resume cannot state any of that, and the app then pasted those answers into
+   real forms. Legal attestations stay unset on purpose: the composer flags them for
+   review, which costs the user one edit and costs them nothing if they are wrong. */
 const fromResume = suggestProfilePatch(parsed, {}).patch;
 const profile = {
   ...fromResume,
-  primaryField: args.field || 'software_engineering',
-  location: parsed.locationGuess || { city: 'Bengaluru', state: 'Karnataka', country: 'India' },
-  remotePreference: args.remote || 'hybrid',
-  openToRelocate: true,
-  needSponsorship: false,
-  willingToSponsor: false,
-  workAuth: ['India'],
+  primaryField: args.field || null,
+  location: parsed.locationGuess || null,
+  remotePreference: args.remote ? 'remote' : null,
+  openToRelocate: null,
+  needSponsorship: null,
+  willingToSponsor: null,
+  workAuth: [],
   yearsExperience: parsed.yearsOfExperience || null,
-  noticePeriodDays: args.notice ? Number(args.notice) : 15,
+  noticePeriodDays: args.notice ? Number(args.notice) : null,
   targets: {
-    fields: [args.field || 'software_engineering'],
-    titleKeywords: ['software engineer', 'sde', 'full stack', 'backend', 'java', 'react'],
-    excludeKeywords: ['sales', 'recruiter', 'hr', 'bpo', 'call center', 'unpaid', 'content writer'],
+    fields: args.field ? [args.field] : [],
+    /* The candidate's own titles, from the document: a fair starting query for
+       ranking. Not a hardcoded "software engineer / sde / react" list, which used to
+       make the CLI's results look personal while being the same for everyone. */
+    titleKeywords: [...new Set((parsed.experience || []).map((e) => e.title).filter(Boolean))].slice(0, 4),
+    excludeKeywords: [],
+    /* Deliberately empty until you set a number — a made-up expectation answers a
+       real form with a real lie, and the score would quietly follow it. */
     minSalary: args.floor ? Number(String(args.floor).replace(/[^\d]/g, '')) : null,
-    salaryCurrency: 'INR',
-    seniority: ['junior', 'mid'],
+    salaryCurrency: args.floor ? 'INR' : null,
+    seniority: [],
     jobTypes: ['full_time'],
-    locations: ['Bengaluru', 'Hyderabad', 'Pune', 'Remote (India)', 'Remote (Worldwide)'],
-    minYearsExperience: parsed.yearsOfExperience || 1,
+    locations: parsed.locationGuess ? [parsed.locationGuess.city].filter(Boolean) : [],
+    minYearsExperience: parsed.yearsOfExperience || null,
     maxApplicationsPerDay: 10,
-    companiesTarget: ['product', 'startup-series-b+'],
-    companiesAvoid: ['staffing', 'IT services MNC', 'BPO'],
   },
-  boolAnswers: {
-    authorizedToWork: true,
-    requireSponsorship: false,
-    legallyAge18: true,
-    willingToRelocate: true,
-    consentBackgroundCheck: true,
-    consentDataProcessing: true,
-    maxNoticePeriodWeeks: Math.ceil((args.notice ? Number(args.notice) : 15) / 7),
-  },
+  boolAnswers: {},
   freeTextAnswers: {
-    noticePeriod: args.notice ? `${args.notice} days` : '15 days',
+    ...(args.notice ? { noticePeriod: `${args.notice} days` } : {}),
     howDidYouHear: 'ApplyFlow job matching',
-    areYouLegallyAble: 'Yes',
-    requireVisaSponsorshipNowOrFuture: 'No',
     linkedinOrPortfolio: [parsed.contact.linkedin, parsed.contact.github, parsed.contact.website].filter(Boolean).join(' | '),
-    // deliberately empty until you set a number — a made-up expectation answers a
-    // real form with a real lie, and the score would quietly follow it.
-    salaryExpectation: args.floor ? `₹${(Number(String(args.floor).replace(/[^\d]/g, '')) / 100000).toFixed(1)}L per annum, negotiable with benefits and ESOPs.` : '',
+    salaryExpectation: args.floor
+      ? `₹${(Number(String(args.floor).replace(/[^\d]/g, '')) / 100000).toFixed(1)}L per annum, negotiable`
+      : '',
   },
+
 };
 
 const post = async (url, body) => {

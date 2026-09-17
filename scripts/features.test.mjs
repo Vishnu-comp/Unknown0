@@ -33,8 +33,12 @@ const { research, SIGNAL_COUNT } = await import('../server/lib/companyResearch.m
 const { scoreJob, scoreWithInsights, candidateVector } = await import('../server/lib/match.mjs');
 const db = await import('../server/lib/db.mjs');
 const demoJobs = (await import('./fixtures/jobFixtures.mjs')).default;
+const { DEMO_PROFILE } = await import('./fixtures/profileFixture.mjs');
 
-const profile = structuredClone(db.DEFAULT_PROFILE);
+/* The suite needs a *populated* profile — it mutates experience bullets and asserts
+   that no invented skill leaks in. That richness is test data now: see the header of
+   scripts/fixtures/profileFixture.mjs for why it left DEFAULT_PROFILE. */
+const profile = structuredClone(DEMO_PROFILE);
 profile.experience[0].bullets = [
   'Built and shipped a self-serve billing console (React + Node + Postgres) used by 12k merchants, cutting support tickets 34%.',
   'Led observability rollout: OpenTelemetry + Grafana across 14 services, p95 latency down 220ms.',
@@ -297,6 +301,61 @@ ok(app.letter.includes('Postman') || app.letter.length > 200, 'letter still buil
 const appNoInsights = await composeApplication({ job: { ...sre, id: 'job_plain' }, profile, resume, settings: { llm: { provider: 'none' }, autoApply: {} }, useInsights: false });
 ok(appNoInsights.score === scoreJob(sre, profile, resume).score, 'useInsights:false reproduces the raw matcher score exactly');
 ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insights are off (they are independent features)');
+
+/* The CLI ingest tool is where a fabricated default hurts most, because it runs
+   unattended in a shell and its output goes straight into the store. Source-grepped,
+   same style as the route-shape checks in test:harvest: a test that re-walks the
+   profile builder would just re-assert whatever the builder currently says. */
+{
+  // comments stripped: the file documents the defaults it no longer has, and a
+  // grep that finds a forbidden phrase inside a comment proves nothing either way
+  const cli = fs.readFileSync('scripts/load-resume.mjs', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  ok(!/consentBackgroundCheck:\s*true|consentDataProcessing:\s*true/.test(cli), 'the CLI does not tick consent boxes for you');
+  ok(!/authorizedToWork:\s*true|areYouLegallyAble:\s*'Yes'|requireVisaSponsorshipNowOrFuture:\s*'No'/.test(cli), 'the CLI does not assert work authorisation or sponsorship');
+  ok(!/city: 'Bengaluru', state: 'Karnataka'/.test(cli), 'the CLI does not invent an address when the resume has none');
+  ok(/noticePeriodDays: args\.notice \? Number\(args\.notice\) : null/.test(cli), 'the CLI leaves notice unset unless --notice was passed');
+  ok(/minSalary: args\.floor \? Number\(String\(args\.floor\)/.test(cli), 'the salary floor still only comes from --floor');
+}
+
+/* What DEFAULT_PROFILE and the answer builder used to assert about a stranger.
+   A legal attestation or a consent tick is not a styling default: once it is in the
+   profile it flows into every letter, every prefill payload and every direct API
+   send, and nobody has to believe it for a form to claim it. */
+console.log('\n· no invented attestations (consent, work authorisation, notice)');
+{
+  const { answerQuestions: ansq, buildPrefill: bp } = await import('../server/lib/letters.mjs');
+  const bare = structuredClone(db.DEFAULT_PROFILE);
+  const qs = [
+    'Do you consent to a background check?',
+    'Do you authorise us to process your personal data under GDPR?',
+    'Are you legally authorised to work in this country?',
+    'Will you now or in the future require sponsorship?',
+    'What is your notice period?',
+    'Why are you looking to leave your current role?',
+  ];
+  const ctx = { job: { title: 'Engineer', company: 'Acme' }, profile: bare, resume: null, match: { yearsOfExperience: null } };
+  const byQ = Object.fromEntries(ansq(qs, ctx).map((a) => [a.question, a]));
+  ok(byQ[qs[0]].needsHuman === true && byQ[qs[0]].answer === null, 'background-check consent is NOT auto-answered for someone who never ticked it', JSON.stringify(byQ[qs[0]]).slice(0, 78));
+  ok(byQ[qs[1]].needsHuman === true, 'data-processing consent likewise goes to review');
+  ok(!/^4 weeks$/i.test(String(byQ[qs[4]].answer || '')), 'notice period is not invented as "4 weeks"', JSON.stringify(byQ[qs[4]].answer));
+  ok(!/more ownership in the product area/i.test(String(byQ[qs[5]].answer || '')), 'reason for leaving is not boilerplate written by the app');
+
+  const picked = structuredClone(db.DEFAULT_PROFILE);
+  picked.boolAnswers = { consentBackgroundCheck: true, authorizedToWork: true, requireSponsorship: true };
+  const withAns = Object.fromEntries(ansq(qs, { ...ctx, profile: picked }).map((a) => [a.question, a]));
+  ok(/Yes, I consent/.test(withAns[qs[0]].answer || '') && !withAns[qs[0]].needsHuman, 'a consent the user DID tick is answered and not flagged', String(withAns[qs[0]].answer).slice(0, 30));
+  ok(withAns[qs[3]].answer !== 'No', 'sponsorship reads the profile instead of answering No either way', JSON.stringify(withAns[qs[3]].answer));
+
+  const pre = bp({ job: { title: 'Engineer', company: 'Acme', url: 'https://x.greenhouse.io/a/1' }, profile: bare, resume: null, match: {}, app: { letter: 'L', answers: [] } });
+  const risky = Object.entries(pre.fields).filter(([k]) => /consent|background|authoriz|sponsor/i.test(k));
+  ok(risky.length > 0 && risky.every(([, v]) => v === null || v === undefined), 'unset attestations are null in the prefill pack, never a typed word', JSON.stringify(risky));
+  ok(Object.values(pre.checkboxes).every((v) => v !== true), 'no checkbox is claimed true for a user who never chose');
+
+  /* The shipped default must not carry a person. */
+  ok(!/alex|kumar|nimbus/i.test(JSON.stringify(db.DEFAULT_PROFILE)), 'DEFAULT_PROFILE names no invented person');
+  ok(db.DEFAULT_PROFILE.boolAnswers && Object.keys(db.DEFAULT_PROFILE.boolAnswers).length === 0, 'DEFAULT_PROFILE asserts no consent/legal answers');
+  ok(db.DEFAULT_PROFILE.targets.minSalary === null && db.DEFAULT_PROFILE.targets.seniority.length === 0, 'DEFAULT_PROFILE guesses no salary floor and no seniority');
+}
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed\n`);

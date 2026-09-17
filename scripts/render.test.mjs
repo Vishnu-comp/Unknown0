@@ -10,7 +10,10 @@ import { ProfileTab, ResumeTab } from '../client/ProfileTab.jsx';
 import { JobsTab, JobModal } from '../client/JobsTab.jsx';
 import { AppsTab } from '../client/AppsTab.jsx';
 import { SettingsTab } from '../client/SettingsTab.jsx';
-import { DEFAULT_PROFILE } from '../server/lib/db.mjs';
+/* Render probes need a populated profile — an empty one exercises the empty
+       states, which is a different (and separately asserted) case. */
+import { DEMO_PROFILE as DEFAULT_PROFILE } from './fixtures/profileFixture.mjs';
+import { DEFAULT_PROFILE as SCAFFOLD } from '../server/lib/db.mjs';
 import demoJobs from './fixtures/jobFixtures.mjs';
 import { scoreJob } from '../server/lib/match.mjs';
 
@@ -85,6 +88,12 @@ const noop = async () => {};
 const cases = {
   ProfileTab: <ProfileTab profile={profile} meta={meta} setProfile={noop} refresh={noop} busy={false} />,
   ProfileTabSparse: <ProfileTab profile={{ fullName: '', skills: [], targets: {} }} meta={meta} setProfile={noop} refresh={noop} busy={false} />,
+  /* A brand-new install is exactly this: the scaffold profile, so every attestation
+     and answer is unset. This is the state the invented DEFAULT_PROFILE used to hide
+     — the app has never rendered with a genuinely blank profile before. */
+  ProfileTabFresh: <ProfileTab profile={SCAFFOLD} meta={meta} setProfile={noop} refresh={noop} busy={false} />,
+  JobsTabFreshProfile: <JobsTab jobs={jobs} meta={meta} profile={SCAFFOLD} refresh={noop} busy={false} setBusy={noop} />,
+  AppsTabFreshProfile: <AppsTab apps={apps} stats={{ total: 1, byStatus: { ready: 1 }, avgScore: 40, today: 0 }} pipeline={meta.pipeline} meta={meta} profile={SCAFFOLD} refresh={noop} busy={false} setBusy={noop} />,
   ResumeTab: <ResumeTab resume={resume} setResume={noop} refresh={noop} busy={false} />,
   ResumeTabEmpty: <ResumeTab resume={null} setResume={noop} refresh={noop} busy={false} />,
   JobsTab: <JobsTab jobs={jobs} meta={meta} refresh={noop} busy={false} setBusy={noop} />,

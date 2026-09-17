@@ -11,7 +11,13 @@ import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import os from 'node:os';
 
+/* The scoring checks below assert against a *populated* profile, so they declare one
+   rather than inheriting it: DEFAULT_PROFILE is a scaffold now (see server/lib/db.mjs),
+   and a test that scores against a fiction is measuring the fiction. */
+const { DEMO_PROFILE: scoringProfile } = await import('../scripts/fixtures/profileFixture.mjs');
+
 const SELF = process.argv.includes('--own-server');
+
 let BASE = process.argv.filter((x) => /^--base=/.test(x))[0]?.split('=')[1] || 'http://127.0.0.1:3000';
 let child = null;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'applyflow-e2e-'));
@@ -104,7 +110,15 @@ check('detected linkedin', /linkedin\.com\/in\/alexkumar-dev/.test(s?.contact?.l
 check('mined ≥12 skills', (s?.skills || []).length >= 12, `${s?.skills?.length} skills`);
 check('parsed work experience blocks', (s?.experience || []).length >= 2, `${s?.experience?.length} roles`);
 check('found quantified wins', (s?.wins || []).length >= 2, `${s?.wins?.length} sentences with numbers`);
-check('profile got suggestions applied', (parsed.data.appliedSuggestions || []).length >= 1, (parsed.data.appliedSuggestions || []).join(', '));
+const appliedNow = parsed.data.appliedSuggestions || [];
+/* On a fresh store the parsed resume must move the profile from empty to filled —
+   that is what applySuggestions is for. This check used to pass by accident, because
+   the shipped DEFAULT_PROFILE already contained the same invented person the sample
+   resume describes. Now the default is a scaffold, so this proves the write happens
+   and proves it wrote the resume’s person rather than a bundled fiction. */
+const profileAfter = (await j('/api/profile')).data.profile;
+check('profile got suggestions applied', appliedNow.length >= 1, appliedNow.join(', '));
+check('the profile now holds the resume’s person', profileAfter.fullName === 'Alexander "Alex" Kumar' && (profileAfter.skills || []).length >= 12 && profileAfter.email === 'alex.kumar@gmail.com', `${profileAfter.fullName} · ${(profileAfter.skills || []).length} skills · ${profileAfter.email}`);
 
 console.log('\n2b. real file uploads (PDF + DOCX via multipart)');
 {
@@ -164,6 +178,14 @@ check('email domain is never mistaken for a portfolio site', !/gmail|yahoo|outlo
 check('skills + quantified wins extracted for tailoring', vSum.skills.length >= 25 && vSum.wins.length >= 4, `${vSum.skills.length} skills, ${vSum.wins.length} wins`);
 
 console.log('\n3. scoring honesty');
+/* Scoring is a function of what the *user* declared, so these tests declare it.
+   DEFAULT_PROFILE used to carry a complete invented person — skills, employers, an
+   ₹18 LPA floor, excluded keywords — and every "honest scoring" assertion here was
+   really measuring that fiction. Now the shipped default is an empty scaffold, so
+   the fixture profile (same person the sample resume describes) goes in by hand,
+   plus the two knobs these checks actually assert on. */
+await j('/api/profile', { method: 'PUT', body: JSON.stringify({ ...scoringProfile, targets: { ...scoringProfile.targets, excludeKeywords: ['sales', 'call center', 'unpaid'], minSalary: 1800000 } }) });
+await j('/api/jobs/recompute', { method: 'POST' });
 const jobs = await j('/api/jobs');
 const byId = Object.fromEntries(jobs.data.jobs.map((x) => [x.jobId || x.id, x]));
 const find = (needle) => jobs.data.jobs.find((x) => x.title.toLowerCase().includes(needle));
@@ -188,7 +210,10 @@ console.log('\n4. application composer');
 const draft = await j('/api/apps/draft', { method: 'POST', body: JSON.stringify({ jobIds: [swe.id], force: true }) });
 const app = draft.data.apps?.[0];
 check('POST /api/apps/draft', draft.status === 200 && Boolean(app), draft.status !== 200 ? JSON.stringify(draft.data).slice(0, 200) : '');
-check('letter mentions the company', (app?.letter || '').includes(swe.company), `${app?.letterWords} words, mode=${app?.letterMode}`);
+
+check('a draft for an id that is not in the store fails loudly, not silently',
+  (await j('/api/apps/draft', { method: 'POST', body: JSON.stringify({ jobIds: ['job_does_not_exist'] }) })).status === 400,
+  'the old shape was 200 {drafted:0}, which reads like "nothing to do"');check('letter mentions the company', (app?.letter || '').includes(swe.company), `${app?.letterWords} words, mode=${app?.letterMode}`);
 check('letter mentions role', (app?.letter || '').toLowerCase().includes('full stack'));
 check('letter quotes a real bullet with a number', /\d/.test(app?.letter || '') && /34%|12,?000|support tickets/.test(app?.letter || ''), (app?.letter || '').match(/\u2022[^\n]+/)?.[0]?.slice(0, 64));
 check('letter does NOT invent skills', !/I am an expert in Rust/.test(app?.letter || ''));
@@ -198,7 +223,18 @@ const why = app.answers.find((a) => /why are you interested/i.test(a.question));
 check('"why interested" answer names the company', (why?.answer || '').includes(swe.company), (why?.answer || '').slice(0, 78));
 const salary = app.answers.find((a) => /salary/i.test(a.question));
 check('salary answer references the posting or floor', /\d/.test(salary?.answer || ''), salary?.answer);
-check('sponsorship question answered consistently with profile', ['Yes', 'No'].includes((app.answers.find((a) => /sponsor/i.test(a.question))?.answer || '').trim()), app.answers.find((a) => /sponsor/i.test(a.question))?.answer);
+/* Two properties the old assertion (an exact 'Yes'/'No' string) could not catch:
+   a *sentence* can say the opposite of the profile — which is exactly what the
+   builder used to do, answering "No, I do not require sponsorship" to candidates who
+   do — and an unanswered attestation must not be silently invented. */
+const sAns = app.answers.find((x) => /sponsor/i.test(x.question))?.answer || '';
+const needSp = (await j('/api/profile')).data.profile.boolAnswers?.requireSponsorship;
+check('sponsorship answer agrees with the profile, whichever way it reads',
+  sAns === ''
+    ? needSp == null
+    : /^\s*yes\b/i.test(sAns) === needSp === true,
+  `${JSON.stringify(sAns.slice(0, 58))} vs requireSponsorship=${JSON.stringify(needSp)}`);
+check('sponsorship answer is not a bare guess', !/^(Yes|No)\.?$/i.test(sAns.trim()) || sAns.trim() === '', sAns ? 'worded answer' : 'left blank for the human');
 check('prefill pack maps standard fields', ['email', 'phone', 'first.name', 'last.name', 'current.company', 'cover.letter', 'notice.period'].every((k) => k in app.prefill.fields), Object.keys(app.prefill.fields).length + ' fields');
 check('prefill never contains a password/secret', !JSON.stringify(app.prefill).match(/"password"|apiKey/i));
 check('checklist flags the missing pieces', Array.isArray(app.checklist.warnings), app.checklist.warnings.length + ' warnings');

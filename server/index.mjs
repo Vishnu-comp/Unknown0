@@ -486,9 +486,16 @@ app.post(
     const st = getSettings();
     const apps = getApplications();
     const out = [];
+    const unknown = [];
     for (const id of ids) {
       const job = jobs.find((j) => j.id === id);
-      if (!job) continue;
+      /* `continue` here used to answer 200 `{drafted:0}` for a typo'd or evicted id —
+         the one response shape that looks like success. Ids are url-derived hashes now,
+         so guessing one is a routine thing to do. */
+      if (!job) {
+        unknown.push(id);
+        continue;
+      }
       const existing = apps.find((a) => a.jobId === id);
       if (existing && !req.body?.force) {
         out.push(existing);
@@ -499,8 +506,15 @@ app.post(
       else apps.unshift(fresh);
       out.push(existing || fresh);
     }
+    if (!out.length && unknown.length) {
+      throw bad(
+        `No job matched the id(s) you passed: ${unknown.slice(0, 4).join(', ')}${unknown.length > 4 ? ` (+${unknown.length - 4} more)` : ''}.` +
+        ` The store holds ${jobs.length} posting(s).` +
+        (jobs.length ? ` Read an id from GET /api/jobs — they are derived from the source url, so they are not guessable.` : ' The store is empty: fetch or import listings first.')
+      );
+    }
     saveApplications(apps.slice(0, 500));
-    json(res, { drafted: out.length, apps: out });
+    json(res, { drafted: out.length, apps: out, ...(unknown.length ? { unknown } : {}) });
   })
 );
 

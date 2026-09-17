@@ -175,10 +175,47 @@ export async function polishLetter({ job, profile, match, resume, settings }) {
 const QA_MAP = [
   { rx: /why (do you want|are you interested|should we hire you)|why (this|{c})|interest/i, a: (ctx) => (ctx.profile.freeTextAnswers?.whyCompanyTemplate || 'I want to work on {company} because {hook}.').replace('{company}', ctx.job.company).replace('{hook}', companyHook(ctx.job) || 'the problem space you are hiring into').replace('{currentCompany}', ctx.profile.experience?.[0]?.company || 'my current team').replace('{transferable}', (ctx.profile.experience?.[0]?.bullets?.[0] || 'built production features').replace(/\.$/, '')).replace('{area}', ctx.job.title || 'this area') },
   { rx: /salary|compensation|expectation/i, a: (ctx) => (ctx.profile.freeTextAnswers?.salaryExpectation || '{expected}').replace('{expected}', ctx.job.salaryMin ? `${ctx.job.salaryCurrency || 'INR'} ${ctx.job.salaryMin.toLocaleString()}` : ctx.profile.targets?.minSalary ? `${ctx.profile.targets.salaryCurrency || 'INR'} ${ctx.profile.targets.minSalary.toLocaleString()}` : 'competitive with market') },
-  { rx: /notice period|how soon|start date|immediate/i, a: (ctx) => ctx.profile.freeTextAnswers?.noticePeriod || '4 weeks' },
-  { rx: /authorized|sponsor|visa|legally/i, a: (ctx) => (ctx.profile.boolAnswers?.requireSponsorship ? ctx.profile.freeTextAnswers?.requireVisaSponsorshipNowOrFuture || 'No' : ctx.profile.freeTextAnswers?.areYouLegallyAble || 'Yes') },
+  { rx: /notice period|how soon|start date|immediate/i, gate: true, a: (ctx) => ctx.profile.freeTextAnswers?.noticePeriod || null },
+  /* These are yes/no statements about the candidate's legal status, so the answer
+     comes only from an explicit profile choice. It used to be *inverted*: needing
+     sponsorship fell through to `|| 'No'` (i.e. "I do not need sponsorship") and not
+     needing it produced 'Yes' for the authorisation question. Both branches were
+     wrong for the people they applied to, which is precisely the class of lie a
+     self-hosted tool must not manufacture. */
+  {
+    rx: /authorized|authorised|legally|right to work|work.*(country|authorisation)/i,
+    gate: true,
+    a: (ctx) => {
+      const v = ctx.profile.boolAnswers?.authorizedToWork;
+      if (v === true) return ctx.profile.freeTextAnswers?.areYouLegallyAble || 'Yes — I am authorised to work here.';
+      if (v === false) return 'No, I would need authorisation.';
+      return null;
+    },
+  },
+  {
+    rx: /sponsor|visa/i,
+    gate: true,
+    a: (ctx) => {
+      const v = ctx.profile.boolAnswers?.requireSponsorship;
+      if (v === true) return ctx.profile.freeTextAnswers?.requireVisaSponsorshipNowOrFuture || 'Yes, I would need sponsorship now or in the future.';
+      if (v === false) return 'No, I do not require sponsorship.';
+      return null;
+    },
+  },
   { rx: /relocat|work from (home|office)|hybrid|onsite/i, a: (ctx) => (ctx.job.remote ? 'This role is remote, which suits me. I am also open to occasional on-site visits.' : ctx.profile.openToRelocate ? `Yes — I'm based in ${ctx.profile.location?.city || 'India'} and open to relocation.` : `No relocation, but ${ctx.profile.location?.city || 'my city'} is a good commute for me.`) },
-  { rx: /background check|consent|privacy|gdpr/i, a: () => 'Yes, agreed.' },
+  /* Consent, work authorship and notice are factual claims about the user, not
+     stylistic choices: answering them from a default is what makes an application
+     misrepresent someone. When the profile has no explicit answer the gate returns
+     null, which drops the question into needsHuman → lowConfidenceAnswers review,
+     and a null prefill key is never typed. */
+  {
+    rx: /background check|consent|privacy|gdpr/i,
+    gate: true,
+    a: (ctx) =>
+      ctx.profile.boolAnswers?.consentBackgroundCheck === true || ctx.profile.boolAnswers?.consentDataProcessing === true
+        ? 'Yes, I consent — recorded in my profile on ' + new Date().toISOString().slice(0, 10) + '.'
+        : null,
+  },
   { rx: /veteran|disabled|gender|ethnicity|race/i, a: () => 'Prefer not to say' },
   { rx: /how did you hear|referral|source/i, a: (ctx) => ctx.profile.freeTextAnswers?.howDidYouHear || 'online job board' },
   { rx: /linkedin|portfolio|github|website|profile link/i, a: (ctx) => [ctx.profile.portfolio, ctx.profile.github, ctx.profile.linkedin].filter(Boolean).join(' | ') || 'n/a' },
@@ -186,8 +223,8 @@ const QA_MAP = [
   { rx: /do you have|experience with|familiar/i, a: (ctx) => { const skill = (ctx.q.match(/(?:have|with|familiar with)\s+(.{3,40})\??$/i) || [])[1]; if (!skill) return 'Yes.'; const has = (ctx.profile.skills || []).some((s) => s.name.toLowerCase().includes(skill.toLowerCase().slice(0, 10))); return has ? `Yes — ${skill.trim().replace(/\?$/, '')} in production.` : `Limited hands-on, but adjacent: ${(ctx.match?.matchedSkills || [])[0] || 'my core stack'} transfers directly.`; } },
   { rx: /why (leaving|left|looking|changing)|reason for change/i, a: (ctx) => `Looking for ${ctx.job.title ? `a role closer to ${ctx.job.title.toLowerCase()}` : 'a harder problem set'} with more ownership and a clear path to impact; that's what your posting describes.` },
   { rx: /greatest weakness|failure|conflict/i, a: () => 'I used to over-polish before shipping. Now I set an explicit "good enough to learn from" bar and ship to a flag — I still refine after real feedback.' },
-  { rx: /relocation assistance|willing to travel/i, a: () => 'Yes, up to ~15% travel.' },
-  { rx: /availability|notice/i, a: (ctx) => ctx.profile.freeTextAnswers?.noticePeriod || '4 weeks' },
+  { rx: /relocation assistance|willing to travel/i, gate: true, a: (ctx) => (ctx.profile.freeTextAnswers?.travelExpectation || null) },
+  { rx: /availability|notice/i, gate: true, a: (ctx) => ctx.profile.freeTextAnswers?.noticePeriod || null },
 ];
 
 export function answerQuestions(questions, ctx) {
@@ -195,9 +232,16 @@ export function answerQuestions(questions, ctx) {
     const text = typeof q === 'string' ? q : q.label || q.question || q.text || '';
     const type = (typeof q === 'object' && q.type) || guessType(text);
     const hit = QA_MAP.find((m) => m.rx.test(text));
-    let answer = hit ? hit.a({ ...ctx, q: text }) : null;
-    if (!answer) answer = fallback(text, ctx, type);
-    return { question: text, type, answer: truncate(answer, 1400), auto: true, confidence: hit ? 0.86 : 0.4 };
+    const answer = hit ? hit.a({ ...ctx, q: text }) : null;
+    if (answer) return { question: text, type, answer: truncate(answer, 1400), auto: true, confidence: 0.86 };
+    /* A gated question with nothing behind it must not fall through to fallback():
+       for a yes/no field that fallback answers 'Yes.' whenever the question starts
+       "do you have…", which would auto-consent to a background check. Flag it for a
+       human and let the filler skip nulls. */
+    if (hit?.gate) {
+      return { question: text, type, answer: null, auto: true, needsHuman: true, confidence: 0.2, note: 'needs an explicit answer from you — not something to guess' };
+    }
+    return { question: text, type, answer: truncate(fallback(text, ctx, type), 1400), auto: true, confidence: 0.4 };
   });
 }
 
@@ -264,17 +308,20 @@ export function buildPrefill({ job, profile, resume, match, app }) {
       'salary.expected': (profile.freeTextAnswers?.salaryExpectation || '').replace('{expected}', (profile.targets?.minSalary || 0).toLocaleString()) || '',
       'salary.current': profile.currentSalary ? String(profile.currentSalary) : '',
       'notice.period': profile.freeTextAnswers?.noticePeriod || '',
-      'work.authorized': profile.boolAnswers?.authorizedToWork ? 'yes' : 'no',
-      'requires.sponsorship': profile.boolAnswers?.requireSponsorship ? 'yes' : 'no',
-      sponsorshipNeeded: profile.boolAnswers?.requireSponsorship ? 'No' : 'No',
+      /* Both branches of the old `? 'No' : 'No'` said No: a candidate who does need
+         sponsorship was shipped a lie on a question some jurisdictions treat as a
+         protected characteristic. Unset now means null → not filled → shown for review. */
+      'work.authorized': profile.boolAnswers?.authorizedToWork === true ? 'yes' : profile.boolAnswers?.authorizedToWork === false ? 'no' : null,
+      'requires.sponsorship': profile.boolAnswers?.requireSponsorship === true ? 'yes' : profile.boolAnswers?.requireSponsorship === false ? 'no' : null,
+      sponsorshipNeeded: profile.boolAnswers?.requireSponsorship === true ? 'Yes' : profile.boolAnswers?.requireSponsorship === false ? 'No' : null,
       'relocate.willing': profile.openToRelocate ? 'yes' : 'no',
-      'background.agree': profile.boolAnswers?.consentBackgroundCheck ? 'yes' : 'no',
-      'consent.data': profile.boolAnswers?.consentDataProcessing ? 'yes' : 'no',
+      'background.agree': profile.boolAnswers?.consentBackgroundCheck === true ? 'yes' : null,
+      'consent.data': profile.boolAnswers?.consentDataProcessing === true ? 'yes' : null,
       'cover.letter': app?.letter || '',
       summary: (resume?.sections?.summary || '').slice(0, 900),
       'how.heard': profile.freeTextAnswers?.howDidYouHear || '',
       referral: profile.referral || '',
-      'reason.for.leaving': 'Seeking a role with more ownership in the product area this team works on.',
+      'reason.for.leaving': profile.freeTextAnswers?.reasonForLeaving || null,
       'desired.salary': String(profile.targets?.minSalary || ''),
       'availability': profile.freeTextAnswers?.noticePeriod || '',
       'gender': profile.diversity?.gender || '',
@@ -283,12 +330,15 @@ export function buildPrefill({ job, profile, resume, match, app }) {
       'disability.status': profile.diversity?.disability || '',
     },
     files: { resume: app?.resumeFilename || resume?.filename || null },
+    /* null (untouched) is deliberately not coerced to false here: a ticked consent
+       box is an assertion by the user, so the extension is told "leave it alone",
+       not "uncheck it" — unchecking is its own claim on some boards. */
     checkboxes: {
-      authorizedToWork: Boolean(profile.boolAnswers?.authorizedToWork),
-      requireSponsorship: Boolean(profile.boolAnswers?.requireSponsorship),
-      willingToRelocate: Boolean(profile.openToRelocate),
-      backgroundCheck: Boolean(profile.boolAnswers?.consentBackgroundCheck),
-      consentDataProcessing: Boolean(profile.boolAnswers?.consentDataProcessing),
+      authorizedToWork: profile.boolAnswers?.authorizedToWork ?? null,
+      requireSponsorship: profile.boolAnswers?.requireSponsorship ?? null,
+      willingToRelocate: profile.openToRelocate ?? null,
+      backgroundCheck: profile.boolAnswers?.consentBackgroundCheck ?? null,
+      consentDataProcessing: profile.boolAnswers?.consentDataProcessing ?? null,
     },
     answers: app?.answers || [],
     uploads: [

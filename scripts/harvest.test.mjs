@@ -362,6 +362,13 @@ ok(indexMjs.includes('FETCH_ON_BOOT'), 'boot-time fetching is wired and can be t
   ok(rows.length === 1 && rows[0].salaryMin === 3000000 && /^\d{4}-\d{2}-\d{2}T/.test(rows[0].postedAt), 'normalizeImport runs the same normaliser as the scrapers', JSON.stringify({ pay: rows[0].salaryMin, posted: rows[0].postedAt, exp: rows[0].minExperience }));
 }
 
+/* Drafting used to answer 200 {drafted:0} when an id matched nothing — the exact
+   response shape that looks like "nothing to do" while actually meaning "you asked
+   for a job that isn't here". With ids now derived from the source url (job_1f2e…),
+   hand-written ids from the docs are a realistic way to hit it. */
+ok(/const unknown = \[\];/.test(indexMjs) && /No job matched the id\(s\) you passed/.test(indexMjs), 'draft refuses loudly when no id matches, and names them');
+ok(/unknown\.length \? \{ unknown \}/.test(indexMjs), 'partial misses are reported in the response, not swallowed');
+
 const atSeed = indexMjs.indexOf("'/api/jobs/seed'");
 ok(atImport > 0 && atImport < atClear && atImport < atSeed, 'import route registered before the other POST /api/jobs/* routes', `import@${atImport} clear@${atClear} seed@${atSeed}`);
 

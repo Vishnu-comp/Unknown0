@@ -95,9 +95,11 @@ node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15   # ~ w
 node scripts/load-resume.mjs --resume=resume.txt --floor=1400000   # sets the INR salary floor too
 ```
 
-It only writes what your document states. The one number it deliberately leaves
-empty is the salary floor: a made-up expectation answers a real form with a
-real lie, and the score would quietly follow it.
+It only writes what your document states. What it cannot read from a resume stays
+empty — the salary floor, your notice period, where you live, whether you need
+sponsorship, whether you consent to a background check. Each of those used to be
+filled in with a plausible default, which meant a stranger's assumptions ended up
+typed into a real form; now they surface as "needs your answer" instead.
 
 The store starts **empty, on purpose**. There is no bundled corpus to fill it: a
 matcher that always has something to show you is a matcher whose numbers nobody
@@ -128,6 +130,24 @@ Worked path:
    postings (the boot fetch can be silenced with `FETCH_ON_BOOT=0`)
 8. **Run auto-apply** (top-right) — or let cron do it (see below)
 
+## Nothing about you is inferred
+
+A matcher that writes letters has to be paranoid about the line between *derived*
+and *invented*, so three things are hard-gated rather than defaulted:
+
+| field | unset profile means | why it is not guessed |
+| --- | --- | --- |
+| consent to background check / data processing | the question is flagged for you and the box is left alone | a tick is your assertion, not a preference; the direct-API payload used to send `consent_for_data_processing: true` for anyone who never opened Settings |
+| authorised to work / need sponsorship | flagged for you | these are legal statements, and the old code answered them **inverted** (needing sponsorship → "No, I do not require sponsorship") |
+| notice period, salary expectation | blank, and the score says "no floor set yet" | a made-up number answers a real form with a real lie, and the ranking quietly follows it |
+
+Unset is written as `null`, not `false` or `''`: the filler skips nulls, so the
+control is untouched rather than ticked *or* unticked — actively un-checking a box
+the user never saw is its own assertion. And the shipped `DEFAULT_PROFILE` is now a
+scaffold (structure, neutral search settings, no biography); the rich "Alex Kumar"
+profile lives in `scripts/fixtures/profileFixture.mjs`, because it is a made-up
+person and was the thing every "honest scoring" test was accidentally measuring.
+
 ## Tests
 
 ```bash
@@ -135,10 +155,10 @@ npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine +
                     # · 119 harvester + ingest-config checks (Naukri/LinkedIn parsing,
                     #   settings→adapter resolution, how a failed fetch is reported,
                     #   route order, and that the API makes no claim it did not measure)
-                    # · 15 render probes · 89 tailoring/intelligence/parsing checks
+                    # · 18 render probes (incl. a genuinely blank first-run profile) · 105 tailoring/intelligence/parsing/attestation checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-                    # = 387, and `npm run test:all` adds the 129 end-to-end ones = 516
-npm run test:e2e    # 129 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
+                    # = 397 (53+30+121+18+105+76), and `npm run test:all` adds 132 e2e = 529
+npm run test:e2e    # 132 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
 npm run test:all    # both
@@ -377,7 +397,7 @@ back up, or `git`-it:
 
 | file | contents |
 | --- | --- |
-| `profile.json` | identity, experience, education, skills, targets, standing answers, consent defaults |
+| `profile.json` | identity, experience, education, skills, targets, standing answers. Legal attestations and consent are **absent, not defaulted** — unset means "ask me" |
 | `resume.json` | extracted text, parsed structure, suggested profile patch |
 | `jobs.json` | normalized postings (upserted by `extId`, ids stay stable) |
 | `applications.json` | packs: letter, answers, prefill, tailored resume + audit, posting insights, status history |
