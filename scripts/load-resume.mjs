@@ -1,0 +1,242 @@
+/**
+ * Load a resume into ApplyFlow: parse it, build a profile from what the parser
+ * found (plus anything you pass in), fill an empty job store with the demo
+ * corpus, and report how the
+ * whole job store re-scores against you.
+ *
+ *   node scripts/load-resume.mjs                          # uses data/samples/sample-resume.txt
+ *   node scripts/load-resume.mjs --resume=my-resume.pdf   # PDF/DOCX/TXT, parsed the same way the app parses it
+ *   node scripts/load-resume.mjs --base=http://127.0.0.1:3000 --seed
+ *
+ * Nothing here is magic: it calls the same endpoints the UI calls
+ * (POST /api/resume, PUT /api/profile, POST /api/jobs/seed, GET /api/jobs),
+ * so anything it prints you can also see and edit in the browser.
+ */
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { nodeTooOld, nodeVersionAdvice } from '../server/lib/runtime.mjs';
+
+const args = Object.fromEntries(
+  process.argv.slice(2).map((a) => {
+    const m = a.match(/^--([^=]+)(?:=(.*))?$/);
+    return m ? [m[1], m[2] === undefined ? true : m[2]] : [a, true];
+  })
+);
+const BASE = args.base || process.env.APPLYFLOW_URL || 'http://127.0.0.1:3000';
+
+/* "~/Downloads/resume.pdf" reaches us literally: a tilde is expanded by the
+   shell only when it starts a word unquoted, and here it starts a flag value.
+   Do the expansion ourselves instead of throwing ENOENT at the reader. */
+function expandHome(p) {
+  const raw = String(p).trim().replace(/^["']|["']$/g, '');
+  if (raw === '~') return os.homedir();
+  if (raw.startsWith('~/') || raw.startsWith('~\\')) return path.join(os.homedir(), raw.slice(2));
+  const userHome = raw.match(/^~([^/\\"']+)/);
+  if (userHome) {
+    try { return path.join(os.homedir().replace(/[^/]*$/, userHome[1]), raw.slice(userHome[0].length)); } catch { /* unknown user */ }
+  }
+  return raw;
+}
+
+function resolveResume(arg) {
+  const p = expandHome(arg);
+  if (fs.existsSync(p)) {
+    if (fs.statSync(p).isDirectory()) {
+      die(`--resume points at a directory (${p}). Here are the resumes inside it:\n    ${listResumes(p)}`);
+    }
+    return p;
+  }
+  const dir = path.dirname(p) || '.';
+  const hint = fs.existsSync(dir)
+    ? `Files there that look like resumes:\n    ${listResumes(dir) || '(none — check the name)'}\n\n  Tip: the shell does not expand "~" inside a flag value. Use\n    --resume=$HOME/Downloads/<file>   or drag the file into the terminal to paste its full path.`
+    : `${dir} does not exist either. Run ls to confirm the path, or use --resume=$HOME/Downloads/<file>.`;
+  die(`no such file: ${p}\n\n  ${hint}`);
+}
+
+const listResumes = (dir) => {
+  try {
+    const hits = fs
+      .readdirSync(dir)
+      .filter((f) => /\.(pdf|docx?|txt|md|rtf)$/i.test(f))
+      .slice(0, 8);
+    return hits.length ? hits.join('\n    ') : '(none — check the name)';
+  } catch {
+    return '(unlistable)';
+  }
+};
+
+function die(msg) {
+  console.error(`\n  ✗ ${msg}\n`);
+  process.exit(1);
+}
+
+if (nodeTooOld() && !/\.(txt|md|markdown|rtf)$/i.test(String(args.resume || ''))) die(nodeVersionAdvice());
+if (nodeTooOld()) console.log(`  ⚠ ${nodeVersionAdvice()}\n`);
+
+const RESUME = resolveResume(args.resume || path.join('data', 'samples', 'sample-resume.txt'));
+
+const { parseResume, extractText, suggestProfilePatch } = await import('../server/lib/resume.mjs');
+
+const buf = fs.readFileSync(RESUME);
+const ext = path.extname(RESUME).slice(1).toLowerCase();
+const mime = { pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }[ext] || 'text/plain';
+let text;
+try {
+  text = ext === 'txt' || ext === 'md' ? buf.toString('utf8') : await extractText(buf, mime, RESUME);
+} catch (e) {
+  die(`${e?.message || e}${e?.status >= 500 ? '' : '\n\n  (this ran in-process, so it is the same code the web UI uses — if it fails here it fails there)'}`);
+}
+const parsed = parseResume(text);
+
+if (args.dump) {
+  fs.mkdirSync(path.dirname(path.resolve(expandHome(args.dump))), { recursive: true });
+  fs.writeFileSync(expandHome(args.dump), text);
+  console.log(`  extracted text → ${expandHome(args.dump)} (${text.length} chars) — nothing else was written, no upload sent`);
+  if (args.dump === 'stdout') process.exit(0);
+}
+
+if (!parsed.name) console.log('· note: no name line detected — set fullName on the Profile tab');
+
+/* Start from what the parser can defend, and add only what the flags state.
+   This block used to write "authorizedToWork: true", "consentBackgroundCheck: true",
+   "workAuth: ['India']", a Bengaluru address and a 15-day notice period for whoever ran
+   it — a resume cannot state any of that, and the app then pasted those answers into
+   real forms. Legal attestations stay unset on purpose: the composer flags them for
+   review, which costs the user one edit and costs them nothing if they are wrong. */
+const fromResume = suggestProfilePatch(parsed, {}).patch;
+const profile = {
+  ...fromResume,
+  primaryField: args.field || null,
+  location: parsed.locationGuess || null,
+  remotePreference: args.remote ? 'remote' : null,
+  openToRelocate: null,
+  needSponsorship: null,
+  willingToSponsor: null,
+  workAuth: [],
+  yearsExperience: parsed.yearsOfExperience || null,
+  noticePeriodDays: args.notice ? Number(args.notice) : null,
+  targets: {
+    fields: args.field ? [args.field] : [],
+    /* The candidate's own titles, from the document: a fair starting query for
+       ranking. Not a hardcoded "software engineer / sde / react" list, which used to
+       make the CLI's results look personal while being the same for everyone. */
+    titleKeywords: [...new Set((parsed.experience || []).map((e) => e.title).filter(Boolean))].slice(0, 4),
+    excludeKeywords: [],
+    /* Deliberately empty until you set a number — a made-up expectation answers a
+       real form with a real lie, and the score would quietly follow it. */
+    minSalary: args.floor ? Number(String(args.floor).replace(/[^\d]/g, '')) : null,
+    salaryCurrency: args.floor ? 'INR' : null,
+    seniority: [],
+    jobTypes: ['full_time'],
+    locations: parsed.locationGuess ? [parsed.locationGuess.city].filter(Boolean) : [],
+    minYearsExperience: parsed.yearsOfExperience || null,
+    maxApplicationsPerDay: 10,
+  },
+  boolAnswers: {},
+  freeTextAnswers: {
+    ...(args.notice ? { noticePeriod: `${args.notice} days` } : {}),
+    howDidYouHear: 'ApplyFlow job matching',
+    linkedinOrPortfolio: [parsed.contact.linkedin, parsed.contact.github, parsed.contact.website].filter(Boolean).join(' | '),
+    salaryExpectation: args.floor
+      ? `₹${(Number(String(args.floor).replace(/[^\d]/g, '')) / 100000).toFixed(1)}L per annum, negotiable`
+      : '',
+  },
+
+};
+
+const post = async (url, body) => {
+  const res = await fetch(BASE + url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${url} → ${res.status}: ${data.error || 'failed'}`);
+  return data;
+};
+const put = async (url, body) => {
+  const res = await fetch(BASE + url, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${url} → ${res.status}: ${data.error || 'failed'}`);
+  return data;
+};
+const get = async (url) => {
+  const res = await fetch(BASE + url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${url} → ${res.status}: ${data.error || 'failed'}`);
+  return data;
+};
+
+console.log(`\nresume: ${RESUME}  (${parsed.words} words, ${ext})`);
+console.log(`  roles found     ${parsed.experience.length}`);
+/* ":8" on its own means the parser could not name the employer — say so, rather
+   than printing a colon and letting someone read it as a formatting glitch. */
+console.log(
+  `  bullets kept    ${parsed.experience.map((e) => `${e.company || '(no company line found)'}:${e.bullets.length}`).join('  ') || '—'}`
+);
+if (parsed.experience.some((e) => !e.company)) console.log('                    ↑ check the EXPERIENCE headers in your PDF text: --dump=/tmp/resume.txt writes what we read');
+console.log(`  education       ${parsed.education.length}`);
+console.log(`  skills          ${parsed.skills.length}  · quantified wins: ${parsed.wins.length}`);
+console.log(`  contact         ${[parsed.contact.email, parsed.contact.phone, parsed.contact.linkedin, parsed.contact.github].filter(Boolean).join(' · ')}`);
+
+/* upload the document so the app can attach it to applications */
+const upload = await post('/api/resume', { text, applySuggestions: false });
+/* The response body is preview-capped server-side, the STORE is not: this line used to
+   print min(len, 4000) as "chars stored", which told people their resume was truncated
+   when nothing of the sort had happened. Report the store, and name the cap separately. */
+const storedChars = (upload.resume?.text || text).length;
+console.log(`\nuploaded to /api/resume → ${storedChars} chars stored, ${upload.resume?.storedPath ? 'file kept' : 'text only (the app keeps the extracted text, not the file)'}` +
+  (storedChars > 4000 ? ` · the API previews the first 4000, the store and the matcher see all of it` : ''));
+
+const saved = await put('/api/profile', profile);
+const c = saved.completeness;
+console.log(`profile saved · completeness ${c.percent}%`);
+const missing = (c.items || []).filter((i) => !i.value).map((i) => i.label);
+if (missing.length) console.log(`  still open: ${missing.join(', ')}`);
+
+let seededCount = 0;
+{
+  const before = await get('/api/jobs');
+  const had = before.count ?? (before.jobs || []).length;
+  /* --seed is a dev flag now, not a convenience: the server refuses fixture seeding
+     unless ALLOW_FIXTURE_SEED=1, because loading fixed test jobs on an empty store
+     made this CLI look like it had ranked real openings when it had ranked nothing
+     real at all. The refusal is printed, never fatal — the resume/profile work above
+     is the point of this script. */
+  if (args.seed) {
+    try {
+      const seed = await post('/api/jobs/seed');
+      seededCount = seed.seeded ?? 0;
+    } catch (e) {
+      console.log(`  --seed refused: ${e.message}`);
+    }
+  }
+  const after = await get('/api/jobs');
+  const now = after.count ?? (after.jobs || []).length;
+  const note = seededCount
+    ? `${seededCount} fixed test-job entries seeded (NOT real openings)`
+    : had
+      ? `already populated — left alone (pass --seed to merge the fixed test jobs on top)`
+      : 'empty — enable a source and POST /api/jobs/fetch, or push harvested rows to /api/jobs/import';
+  console.log(`\njob store: ${now} postings (${note})`);
+}
+
+const jobs = await get('/api/jobs?sort=score');
+const rows = (jobs.jobs || []).map((j) => ({
+  score: j.match.score,
+  grade: j.match.grade,
+  company: j.company,
+  title: j.title,
+  skills: (j.match.matchedSkills || []).slice(0, 5).join(','),
+  flags: (j.match.flags || []).join(' / '),
+}));
+console.log('\nranked against your actual profile:');
+for (const r of rows.slice(0, 12)) {
+  console.log(`  ${String(r.score).padStart(3)} ${r.grade.padEnd(2)} ${r.company.slice(0, 20).padEnd(20)} ${r.title.slice(0, 44)}`);
+  if (r.skills) console.log(`        ✓ ${r.skills}`);
+  if (r.flags) console.log(`        ⚠ ${r.flags}`);
+}
+const intel = rows.length ? await get(`/api/jobs/${(jobs.jobs || [])[0].id}/research`) : null;
+if (intel) {
+  console.log('\ntop posting, what it reveals:');
+  for (const i of intel.research.insights) console.log(`  · ${i.label}: ${i.value}`);
+  console.log(`  coverage ${intel.research.coverage} · verdict ${intel.research.verdict} · matcher ${intel.match.baseScore} → ${intel.match.score}`);
+}
+console.log(`\nopen the app → ${BASE.replace('127.0.0.1', 'localhost')}\n`);

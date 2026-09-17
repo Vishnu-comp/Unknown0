@@ -1,0 +1,54 @@
+Vishnu Nair
++91-9967418222 | vishnunair2323@gmail.com | linkedin.com/in/vishnu-nair-tech | github.com/Vishnu-comp | vishnunairportfolio.vercel.app
+
+PROFESSIONAL SUMMARY
+Software Development Engineer with 2 years of experience building scalable, high-impact applications using Java, Spring Boot, React.js, and MySQL. Proven track record in designing and deploying payment integration systems, workflow automation, and real-time communication platforms that improved operational efficiency by 85% and payment accuracy by 76%. Strong foundation in object-oriented design, data structures, algorithms, and test-driven development. Seeking Software Development Engineer opportunities to build scalable, reliable, and high-performance software solutions.
+
+WORK EXPERIENCE
+Shoffr — Software Development Engineer (NextJS, TypeScript, MySQL, Spring Boot, Tailwind CSS, Redux, Thymeleaf, JavaScript) | Jan 2025 – Present
+• Designed backend logic for trip prioritization, reducing manual work by 75% using functional programming.
+• Integrated Paytm Link, UPI and payment authentication APIs for payment orchestration, cutting failures by 76%.
+• Built self-service CRM workflow system for business teams, cutting resolution time by 65%.
+• Built flight-delay processing pipeline with distributed systems, improving efficiency by 85%.
+• Engineered real-time chat system using WebSockets for reliable communication across ops, CX and drivers.
+• Owned Recurring Ride feature enabling weekly bookings with upfront payment and automated trip creation.
+• Launched B2B partnership platform for managing merchants, growing inquiries from 5 to 15 per month.
+• Implemented reconciliation workflows with automated validation, improving financial accuracy by 60%.
+ICIER — Junior Software Development Intern (MongoDB, ExpressJS, ReactJS, NodeJS, Tailwind CSS) | May 2024 – Aug 2024
+• Developed MERN applications with clean business logic and RESTful APIs for scalable performance.
+• Designed React.js interfaces and RESTful APIs with authentication and error handling.
+• Built event platform using lazy loading and custom hooks to improve performance and user experience.
+
+PROJECTS
+Unishare | MongoDB, ExpressJS, ReactJS, NodeJS, REST APIs, Socket.IO | Apr 2024
+• Built resource-sharing platform backend for borrowing and lending items with clean business logic.
+• Developed admin dashboard to manage users, listings and transactions with high availability.
+• Implemented real-time messaging using WebSockets and Socket.IO for instant communication.
+• Leveraged Google Gemini API for AI-powered assistance and query resolution.
+Intervo | Java, Spring Boot, MongoDB, Flask, Python, REST APIs | Jul 2024
+• Created interview automation platform for onboarding, scheduling and assessments.
+• Developed Python scheduling engine to optimize interviewer allocation and improve performance.
+• Automated candidate onboarding using CSV processing and email integration for faster onboarding.
+• Implemented secure assessments with question randomization and proctoring for reliability.
+
+EDUCATION
+Christ University Bangalore — Master of Computer Applications, Computer Applications — Jul 2023 – May 2025 — 73%
+Kristu Jayanti Autonomous College — Bachelor of Computer Applications, Computer Applications — Aug 2020 – May 2023 — 83%
+
+SKILLS
+Programming Languages: Java, JavaScript, TypeScript, Python, SQL, Functional Programming, Go, C, C++
+Frameworks & Libraries: Spring Boot, React.js, Next.js, Node.js, Redux, Tailwind CSS, Flask, Thymeleaf
+Databases & Cloud: MySQL, PostgreSQL, MongoDB, AWS EC2
+Developer Tools & DevOps: Git, GitHub, Postman, Docker, Maven, Jenkins, CI/CD, VS Code, Linux/UNIX
+Testing & APIs: REST APIs, API Integrations, Payment Integration, UPI, Authentication, JUnit, Mockito, WebSockets, TDD
+Distributed Systems: Microservices, Distributed Systems, System Design, RabbitMQ, Framework Development, Reconciliation
+Languages: English, Hindi, Malayalam, Marathi, Kannada, Tamil
+
+ACHIEVEMENTS
+• Achieved 1st Place in Treasure Hunt Shells 2024 at Kristu Jayanti Autonomous College.
+• Awarded 3rd Place in Gyanith 2024 Hackathon at NIT Puducherry.
+• Awarded 3rd Place in Gyanith 2024 Code Hunt at NIT Puducherry.
+
+CERTIFICATES
+Java Foundation Course — Oracle Academy (2025)
+AWS Academy Cloud Foundations — AWS Academy (2025)
