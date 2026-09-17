@@ -121,7 +121,8 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 423 checks, ~6 seconds
+npm test               # 6 suites, 431 checks, ~6 seconds
+npm run doctor           # read-only diagnosis of Node, TLS trust, proxies, sources
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
 npm run test:e2e       # 132 checks; boots its own server on a random port :3210-3299
@@ -133,12 +134,12 @@ npm run test:all       # both
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 18 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
-| `test:features` — `scripts/features.test.mjs` | 120 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:features` — `scripts/features.test.mjs` | 128 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:harvest` — `scripts/harvest.test.mjs` | 126 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 132 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 126 + 18 + 120 + 76 = 423 checks, plus 132 end-to-end = 555.** Current tree: all green
+**53 + 30 + 126 + 18 + 128 + 76 = 431 checks, plus 132 end-to-end = 563.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -348,7 +349,7 @@ send `{"confirm":true}`). Submissions log to `/api/submissions`.
 | resume parses to a name and nothing else | the PDF is an image; it has no text layer. Use the `.docx`/`.txt` export |
 | `The PDF reader could not load inside this Node process` | Node too old for the pinned pdfjs, or someone bumped it past 3.x on a Node 18 box (see §0) — nothing wrong with your file |
 | `no such file: ~/Downloads/x.pdf` | your shell left a literal `~` inside the flag value. The script expands `~` itself now, so this means the file really isn't there — it lists what *is* in that folder |
-| `TLS could not be verified — a filtering/inspecting proxy answered for this host` | something on your machine is intercepting TLS (a corporate/security proxy). Name it: `echo \| openssl s_client -connect boards-api.greenhouse.io:443 -servername boards-api.greenhouse.io 2>/dev/null \| openssl x509 -noout -issuer`. If the issuer is not a public CA, either add its CA to Node (`NODE_EXTRA_CA_CERTS=…`) or turn that source off — do not "fix" it by disabling certificate verification. |
+| every source fails a TLS check | run `npm run doctor`. It reads the certificate each host actually presents and says which of four things is true — *intercepted* (issuer is not a public CA), *not-trusted* (real cert, stale Node roots), *self-signed*, or *blocked* (handshake never happened). Do not guess from the errno: an earlier build printed "a filtering/inspecting proxy answered" off one code alone, and a user with an Amazon-issued cert and no proxy chased a middlebox that was not there | -connect boards-api.greenhouse.io:443 -servername boards-api.greenhouse.io 2>/dev/null \| openssl x509 -noout -issuer`. If the issuer is not a public CA, either add its CA to Node (`NODE_EXTRA_CA_CERTS=…`) or turn that source off — do not "fix" it by disabling certificate verification. |
 | resume parses but `company` is empty and the company is in `title` | older builds; the two-line header a flattened two-column PDF produces (`Shoffr` / `— Software Development Engineer (…)`) is handled now. Check what we actually read with `--dump=/tmp/resume.txt` |
 | every live source errors `no route from this machine` / `EHOSTUNREACH` / `000` | you're in a sandbox or behind an egress allowlist: only npm + `api.github.com` get out. Expected; use Settings → Import jobs JSON. `GET /api/jobs/fetch-status` keeps the last attempt's per-source errors so you can read them after a reboot |
 | extension fills nothing | it only reads a copied payload — re-run "copy extension payload", then Reload the extension after `npm run build` |

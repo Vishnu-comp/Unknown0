@@ -14,6 +14,7 @@
  * old install still fetches instead of erroring "unknown source" forever.
  */
 import { normalize, parseDateLoose, extractSalary, truncate } from './text.mjs';
+import { diagnoseTls } from './tlsdiag.mjs';
 
 const FETCH_TIMEOUT = Number(process.env.FETCH_TIMEOUT_MS || 9000);
 
@@ -23,39 +24,53 @@ const FETCH_TIMEOUT = Number(process.env.FETCH_TIMEOUT_MS || 9000);
  * "fetch failed" and assumes the source is quiet; with it they read ECONNRESET
  * and know their network (or a sandbox egress list) is the wall — and the way round it.
  */
-function networkHint(url, e) {
-  const host = url.split('/')[2] || url;
-  /* Node reports transport failures as `TypeError: fetch failed` with the real
-     reason on e.cause.code, so the cause has to be consulted first — the message
-     alone would say nothing. */
+export async function networkHint(url, e) {
+  const host = (() => {
+    try { return new URL(url).hostname; } catch { return String(url).split('/')[2] || String(url); }
+  })();
+  /* Node reports transport failures as `TypeError: fetch failed` with the real reason on
+     e.cause.code, so the cause has to be consulted first — the message alone says nothing. */
   const code = String(e?.cause?.code || e?.code || e?.message || '');
-  const transport =
-    /CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED|UNKNOWN_CA|DEPTH_ZERO/i.test(code)
-      ? 'TLS could not be verified — a filtering/inspecting proxy answered for this host'
-      : /ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ENETDOWN|ECONNRESET|ECONNABORTED|EPERM|EHOSTDOWN|network|getaddrinfo|ENOTFOUND/i.test(code)
+  const tlsish = /CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED|UNKNOWN_CA|DEPTH_ZERO|ALTNAME|EXPIRED/i.test(code);
+  if (!tlsish) {
+    const transport =
+      /ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ENETDOWN|ECONNRESET|ECONNABORTED|EPERM|EHOSTDOWN|network|getaddrinfo|ENOTFOUND/i.test(code)
         ? 'unreachable from this machine'
         : e?.name === 'AbortError' || /abort|timed out/i.test(code)
           ? `no answer within ${FETCH_TIMEOUT / 1000}s`
           : /fetch failed/i.test(code)
             ? 'request failed at the network layer'
             : null;
-  if (!transport) return e; // a real HTTP/parse error already carries its own explanation
-  const tls = /CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED/i.test(code);
-  /* Two changes here, both from a real session on a laptop behind an inspecting
-     middlebox. (1) The advice used to ride on every single error, so a run of three
-     Greenhouse boards printed the same forty-word paragraph three times and the part
-     that actually varied — which host, which code — got buried. It now rides once, on
-     the summary the caller builds, and each line stays short. (2) "a filtering/inspecting
-     proxy answered for this host" is a guess about the user's machine. Node hands us the
-     certificate that failed verification (ERR_TLS_CERT_ALTNAME_INVALID puts it in
-     cause.detail); quoting its issuer turns the guess into a diagnosis — "issuer:
-     Netskope" tells you exactly which process to look at. */
-  const peer = String(e?.cause?.detail?.cert || e?.cause?.peerCertificate || '');
-  const issuer = peer ? peer.match(/O=([^,;]+)/)?.[1]?.trim().slice(0, 48) : '';
-  /* One line, one fact, no advice: the caller's summary states what to do about it. */
-  return new Error(
-    `${host} → ${transport}${tls ? (issuer ? ` (certificate issued by ${issuer})` : '') : ` (${code})`}.`
-  );
+    // a real HTTP/parse error already carries its own explanation
+    return transport ? new Error(`${host} → ${transport} (${code}).`) : e;
+  }
+  /* TLS. A code alone cannot tell a filtering proxy from a stale CA bundle, and the two
+     need opposite fixes, so ask the peer for its certificate rather than guessing from
+     the errno. An earlier version of this function asserted "a filtering/inspecting proxy
+     answered for this host" on UNABLE_TO_VERIFY_LEAF_SIGNATURE alone — and a user whose
+     node had a real Amazon-issued cert and no proxy went looking for a middlebox that did
+     not exist. Never let the diagnostic become the failure: if the probe throws, say only
+     what the code says. */
+  let d = null;
+  try {
+    d = await diagnoseTls(host, e);
+  } catch {
+    d = null;
+  }
+  if (!d || d.kind === 'unknown') return new Error(`${host} → TLS verification failed (${code}). Run \`npm run doctor\` for the reason.`);
+  if (d.kind === 'intercepted') {
+    return new Error(`${host} → TLS intercepted: the certificate is issued by "${d.issuer}", not a public CA for this hostname.`);
+  }
+  if (d.kind === 'wrong-host') {
+    return new Error(`${host} → TLS: certificate is for ${d.subject}, presented by this network for ${host}.`);
+  }
+  if (d.kind === 'self-signed') {
+    return new Error(`${host} → TLS: the certificate is self-signed (${d.issuer}).`);
+  }
+  if (d.kind === 'not-trusted') {
+    return new Error(`${host} → TLS: valid public certificate (issued by "${d.issuer}") that this Node does not trust (${d.error}) — a local trust problem, not a proxy. \`npm run doctor\` exports the system CA bundle.`);
+  }
+  return new Error(`${host} → TLS handshake never completed (${d.error || code}).`);
 }
 
 async function getJson(url, headers = {}) {
@@ -66,7 +81,7 @@ async function getJson(url, headers = {}) {
     if (!res.ok) throw new Error(`${url.split('/')[2]} → HTTP ${res.status}`);
     return await res.json();
   } catch (e) {
-    throw networkHint(url, e);
+    throw await networkHint(url, e);
   } finally {
     clearTimeout(t);
   }
@@ -101,7 +116,7 @@ async function getDoc(url, headers = {}) {
   } catch (e) {
     /* The anti-bot branch above raised its own useful Error; networkHint only
        rewrites transport failures, so that message passes through untouched. */
-    throw networkHint(url, e);
+    throw await networkHint(url, e);
   } finally {
     clearTimeout(t);
   }

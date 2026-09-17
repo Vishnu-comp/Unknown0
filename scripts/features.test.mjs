@@ -362,6 +362,25 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
     'the purge runs at boot, before anything can score the store');
 }
 
+/* The TLS hint used to read one errno and assert "a filtering/inspecting proxy answered
+   for this host". A user whose node had a real Amazon cert and no proxy went hunting a
+   middlebox that did not exist, so the classifier now looks at the certificate — and these
+   pins keep the pure parts honest without needing a network. */
+{
+  const d = await import('../server/lib/tlsdiag.mjs');
+  ok(d.sanMatches('DNS:npmjs.org, DNS:*.npmjs.org', 'npmjs.org') === true, 'a SAN list with the bare name matches');
+  ok(d.sanMatches('DNS:*.greenhouse.io', 'a.b.greenhouse.io') === false, 'a wildcard never matches two levels deep');
+  ok(d.sanMatches('DNS:api.github.com', 'github.com') === false, 'a cert for a subdomain is not a cert for the parent');
+  ok(d.isPublicCaIssuer('C=US\nO=Amazon\nCN=Amazon RSA 2048 M04') === true, 'an Amazon-issued cert is recognised as public (this was the false accusation)');
+  ok(d.isPublicCaIssuer('O=E2B\nCN=E2B Proxy CA') === false, 'a proxy CA is not a public issuer');
+  ok(d.oneLineDn('C=US\nO=Amazon\nCN=Amazon RSA 2048 M04') === 'US / Amazon / Amazon RSA 2048 M04', 'DNs are printed one line, field order intact');
+  const hint = fs.readFileSync('server/lib/ingest.mjs', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  ok(!/a filtering\/inspecting proxy answered for this host/.test(hint),
+    'the code never asserts a proxy from an errno alone — it must have read a certificate');
+  ok(/kind === 'intercepted'/.test(hint) && /kind === 'not-trusted'/.test(hint) && /self-signed/.test(hint),
+    'the hint distinguishes intercepted / not-trusted / self-signed instead of picking one guess');
+}
+
 /* The CLI ingest tool is where a fabricated default hurts most, because it runs
    unattended in a shell and its output goes straight into the store. Source-grepped,
    same style as the route-shape checks in test:harvest: a test that re-walks the

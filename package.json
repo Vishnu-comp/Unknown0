@@ -18,7 +18,8 @@
     "test:ats": "node scripts/ats.test.mjs",
     "test:features": "node scripts/features.test.mjs",
     "test:match": "node scripts/match.test.mjs",
-    "test:harvest": "node scripts/harvest.test.mjs"
+    "test:harvest": "node scripts/harvest.test.mjs",
+    "doctor": "node scripts/doctor.mjs"
   },
   "engines": {
     "node": ">=18.0.0"

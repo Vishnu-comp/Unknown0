@@ -263,7 +263,7 @@ ok(/CERT\|SSL\|TLS\|UNABLE_TO_/.test(ingestMjs), 'networkHint recognises TLS-int
 {
   const hintCode = ingestMjs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const idxCode = indexMjs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  ok(/cause\?\.detail\?\.cert/.test(hintCode), 'networkHint reads the failing certificate so the interceptor is named, not guessed');
+  ok(/await diagnoseTls\(host, e\)/.test(hintCode), 'networkHint asks the peer for its certificate before naming a cause');
   ok(!/sandbox or behind an egress allowlist/.test(hintCode),
     'networkHint states only host+reason: three boards used to print the same forty-word advice three times and bury what differed');
   ok(/A blocked or filtered network looks exactly like a quiet board/.test(idxCode) &&

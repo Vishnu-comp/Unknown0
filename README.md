@@ -152,12 +152,12 @@ person and was the thing every "honest scoring" test was accidentally measuring.
 
 ```bash
 npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
-                    # · 119 harvester + ingest-config checks (Naukri/LinkedIn parsing,
+                    # · 126 harvester + ingest-config checks (Naukri/LinkedIn parsing,
                     #   settings→adapter resolution, how a failed fetch is reported,
                     #   route order, and that the API makes no claim it did not measure)
-                    # · 18 render probes (incl. a genuinely blank first-run profile) · 120 tailoring/intelligence/parsing/attestation checks
+                    # · 18 render probes (incl. a genuinely blank first-run profile) · 128 tailoring/intelligence/parsing/attestation checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-                    # = 423 (53+30+126+18+120+76), and `npm run test:all` adds 132 e2e = 555
+                    # = 431 (53+30+126+18+128+76), and `npm run test:all` adds 132 e2e = 563
 npm run test:e2e    # 132 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
