@@ -340,6 +340,19 @@ export function SettingsTab({ settings, setSettings, meta, refresh, busy, setBus
               >
                 wipe applications + jobs
               </button>
+              <button
+                className="btn sm danger"
+                disabled={busy}
+                onClick={async () => {
+                  if (!confirm('Also reset the PROFILE to the blank scaffold? Applications, jobs, counters, your resume parse and every answer you typed are deleted. There is no undo.')) return;
+                  await api.resetAll();
+                  await refresh();
+                  toast('everything cleared, profile included');
+                }}
+              >
+                wipe everything, profile too
+              </button>
+              <div className="dim small">an install that predates the scaffold profile may hold attestations and a salary floor the app set for you — that is what this second button is for</div>
               <a className="btn sm danger" href={api.exportPackUrl} target="_blank" rel="noreferrer">dump my applications (.md) before wiping</a>
             </div>
           </div>

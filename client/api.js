@@ -77,6 +77,9 @@ export const api = {
   settings: () => req('GET', '/api/settings'),
   saveSettings: (s) => req('PUT', '/api/settings', s),
   reset: () => req('POST', '/api/reset'),
+  /* ?profile=1 is opt-in at the route because a profile is the expensive thing to
+     re-type; the UI asks separately rather than folding it into the plain wipe. */
+  resetAll: () => req('POST', '/api/reset?profile=1'),
 
   /* Paste-and-import. Rows are normalised server-side, so the payload can be a bare
      array, {jobs:[…]} or a raw Naukri search response — see server/lib/harvest.mjs. */

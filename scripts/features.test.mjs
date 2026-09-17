@@ -381,6 +381,24 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
     'the hint distinguishes intercepted / not-trusted / self-signed instead of picking one guess');
 }
 
+/* An error that tells you to open a panel which does not exist is worse than no
+   instruction: you look for it, conclude the app is broken, and give up. So every
+   "Settings → X" the server prints has to be a real Settings panel, and the runner policy
+   (which is NOT in Settings) must be named by where it actually lives. */
+{
+  const ui = fs.readFileSync('client/SettingsTab.jsx', 'utf8');
+  const svr = fs.readFileSync('server/index.mjs', 'utf8') + fs.readFileSync('server/lib/atsSubmit.mjs', 'utf8');
+  const promised = [...svr.matchAll(/Settings → ([A-Za-z][A-Za-z ]{1,24}?)(?=[^\sA-Za-z])/g)].map((m) => m[1].trim());
+  const known = (p) => ui.includes(p) || p.split(/\s+/).some((w) => w.length > 3 && ui.includes(w));
+  const unknown = [...new Set(promised)].filter((p) => !known(p));
+  ok(unknown.length === 0, `no server message points at a missing Settings panel (${unknown.join('", "') || 'all resolve'})`);
+  ok(/Auto-apply is off[\s\S]{0,160}Applications → Auto-apply policy/.test(svr), 'the runner-off error names Applications, where the toggle is');
+  ok(fs.readFileSync('client/App.jsx', 'utf8').includes("setTab(settings?.autoApply?.enabled ? 'settings' : 'apps')"),
+    'the home "sources + policy" step sends you to Applications when the runner is the missing half');
+  ok(/resetAll: \(\) => req\('POST', '\/api\/reset\?profile=1'\)/.test(fs.readFileSync('client/api.js', 'utf8')),
+    'the UI can actually clear an invented profile instead of leaving that to curl');
+}
+
 /* The CLI ingest tool is where a fabricated default hurts most, because it runs
    unattended in a shell and its output goes straight into the store. Source-grepped,
    same style as the route-shape checks in test:harvest: a test that re-walks the

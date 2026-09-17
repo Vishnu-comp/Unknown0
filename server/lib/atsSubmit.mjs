@@ -329,7 +329,7 @@ function describeError(status, data) {
   }
   if (status === 401 || status === 403) return 'this board requires a signed one-time token from its own job page; we do not spoof it — fill with the extension and press Submit yourself';
   if (status === 404) return 'job no longer open or the board slug is wrong — re-fetch the job list and re-prepare the application';
-  if (status === 429) return 'rate limited by the ATS — space submissions out (Settings → daily cap)';
+  if (status === 429) return 'rate limited by the ATS — space submissions out (the shared cap is under Applications → Auto-apply policy)';
   return `HTTP ${status}${data?.raw ? ' — ' + String(data.raw).slice(0, 160) : ''}`;
 }
 

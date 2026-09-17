@@ -252,7 +252,7 @@ function Dashboard({ meta, profile, completeness, jobs, apps, appStats, resume, 
               <Step n={2} title="resume in" done={Boolean(resume)} onClick={() => setTab('resume')}>
                 {resume ? <span className="chip good">{resume.filename} · {resume.summary?.skills?.length || 0} skills mined</span> : <span className="chip miss">no resume yet — parsing it is the biggest quality jump you can make</span>}
               </Step>
-              <Step n={3} title="sources + policy" done={Boolean(settings?.sources && Object.values(settings.sources).some(Boolean)) && Boolean(settings?.autoApply?.enabled)} onClick={() => setTab('settings')}>
+              <Step n={3} title="sources + policy" done={Boolean(settings?.sources && Object.values(settings.sources).some(Boolean)) && Boolean(settings?.autoApply?.enabled)} onClick={() => setTab(settings?.autoApply?.enabled ? 'settings' : 'apps')}>
                 <span className={`chip ${Object.values(settings?.sources || {}).some(Boolean) ? 'good' : 'miss'}`}>{Object.keys(settings?.sources || {}).filter((k) => settings?.sources?.[k]).length || 0} source(s) on</span>
                 <span className={`chip ${settings?.autoApply?.enabled ? 'good' : 'flag'}`}>runner {settings?.autoApply?.enabled ? 'enabled' : 'off'}</span>
               </Step>

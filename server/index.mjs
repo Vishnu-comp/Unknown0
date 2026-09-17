@@ -798,7 +798,13 @@ app.post(
     if (Object.keys(overrides).length) st.autoApply = { ...st.autoApply, ...overrides };
     if (Object.keys(overrides).length && req.body?.persist !== false) saveSettings({ autoApply: st.autoApply });
     if (!st.autoApply.enabled && !Array.isArray(req.body?.jobIds)) {
-      throw bad('Auto-apply is off. Enable it in Settings → policy (or pass jobIds to draft specific jobs once).');
+      throw bad(
+        'Auto-apply is off. Flip "enable runner" in Applications → Auto-apply policy, or post ' +
+        'this request with {"enabled": true} — that persists the switch, so add "persist": false ' +
+        'for a one-off and "dryRun": true to draft nothing — or ' +
+        '{"jobIds": [\"job_x\"]} to draft specific jobs once. ' +
+        'Settings has no policy panel — the runner lives with the applications it produces.'
+      );
     }
     const out = await runAutoApply({
       jobs: getJobs(),

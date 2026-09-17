@@ -121,7 +121,7 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 431 checks, ~6 seconds
+npm test               # 6 suites, 435 checks, ~6 seconds
 npm run doctor           # read-only diagnosis of Node, TLS trust, proxies, sources
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
@@ -134,12 +134,12 @@ npm run test:all       # both
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 18 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
-| `test:features` — `scripts/features.test.mjs` | 128 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:features` — `scripts/features.test.mjs` | 132 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:harvest` — `scripts/harvest.test.mjs` | 126 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 132 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 126 + 18 + 128 + 76 = 431 checks, plus 132 end-to-end = 563.** Current tree: all green
+**53 + 30 + 126 + 18 + 132 + 76 = 435 checks, plus 132 end-to-end = 567.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -338,7 +338,38 @@ send `{"confirm":true}`). Submissions log to `/api/submissions`.
 
 ---
 
-## 7. If it doesn't come up
+## 7. Running the loop (and the one-off dry run)
+
+The runner's controls are **not in Settings** — they live with the applications they
+produce: **Applications → Auto-apply policy** ("enable runner", min score, daily cap,
+per-source cap, cooldown, mode). Settings holds sources, import, direct submit, the model
+and data operations; if an error message ever tells you to open a Settings panel that
+isn't there, that is a bug worth reporting (test:features greps for it now).
+
+```bash
+# what would happen today, without drafting anything and without saving the switch
+curl -s -X POST localhost:3000/api/runner/run -H 'content-type: application/json' \
+  -d '{"enabled": true, "dryRun": true, "persist": false}'
+
+# commit to it: same call, persist:true is the default so the flag is remembered
+curl -s -X POST localhost:3000/api/runner/run -H 'content-type: application/json' -d '{"enabled": true}'
+
+# draft two specific jobs once, ignoring the enable switch entirely
+curl -s -X POST localhost:3000/api/runner/run -H 'content-type: application/json' \
+  -d '{"jobIds": ["job_abc123", "job_def456"]}'
+
+# the cron seam: refuses quietly when the runner is off, same caps otherwise
+curl -s -X POST localhost:3000/api/runner/tick
+```
+
+`POST /api/runner/run` answers 400 with this exact guidance when the switch is off,
+because an empty `{queued: []}` would read like "the policy works, nothing matched" when
+the truth is "the policy is off". `persist:false` writes nothing at all — verified by
+`data/settings.json` not existing afterwards.
+
+---
+
+## 8. If it doesn't come up
 
 | symptom | cause / fix |
 |---|---|
@@ -356,7 +387,7 @@ send `{"confirm":true}`). Submissions log to `/api/submissions`.
 
 ---
 
-## 8. What is *not* here, on purpose
+## 9. What is *not* here, on purpose
 
 - No auto-submit on LinkedIn/Indeed/Workday/iCIMS/SmartRecruiters — those need a
   login or a captcha, so the last click stays yours. The seam to add your own
