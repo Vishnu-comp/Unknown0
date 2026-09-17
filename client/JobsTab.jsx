@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { api, toast, copy } from './api.js';
-import { Panel, Ring, Chips, Spinner, Modal, fmtMoney, timeAgo, postedAgo, Bar, Tabs } from './ui.jsx';
+import { Panel, Ring, Chips, Spinner, Modal, fmtMoney, timeAgo, postedAgo, Bar, Tabs, RealtimeActions } from './ui.jsx';
 
 /**
  * One pay line for the card and the modal, from whichever fields exist.
@@ -38,18 +38,6 @@ export function JobsTab({ jobs, meta, refresh, busy, setBusy, profile }) {
 
   const sources = [...new Set(jobs.map((j) => j.source))].sort();
 
-  async function fetchLive(keys) {
-    setBusy(true);
-    try {
-      const r = await api.fetchJobs(keys);
-      await refresh();
-      toast(`fetched ${r.fetched} live jobs${r.errors?.length ? ` · ${r.errors.length} source error(s)` : ''}`, r.errors?.length ? 'warn' : 'ok', 6000);
-    } catch (e) {
-      toast(e.message, 'err', 9000);
-    }
-    setBusy(false);
-  }
-
   async function draft(ids, opts = {}) {
     setBusy(true);
     try {
@@ -74,11 +62,8 @@ export function JobsTab({ jobs, meta, refresh, busy, setBusy, profile }) {
           </p>
         </div>
         <div className="btn-row">
-          <button className="btn sm" disabled={busy} onClick={() => api.seed().then(async (r) => { await refresh(); toast(r.message); })}>+ demo corpus</button>
           {sources.length === 0 && <span className="pill warn"><span className="dot" />no jobs loaded</span>}
-          <button className="btn sm primary" disabled={busy} onClick={() => fetchLive((meta?.sources || []).filter((s) => !s.needsKey).map((s) => s.key))}>
-            {busy ? <Spinner text="fetching…" /> : 'fetch from key-less sources'}
-          </button>
+          <RealtimeActions meta={meta} refresh={refresh} busy={busy} setBusy={setBusy} toast={toast} variant="sm" hint={false} />
         </div>
       </div>
 
@@ -133,7 +118,9 @@ export function JobsTab({ jobs, meta, refresh, busy, setBusy, profile }) {
         {list.length === 0 && (
           <div className="empty">
             <b>{jobs.length ? 'nothing matches those filters' : 'no jobs in the store yet'}</b>
-            {jobs.length ? 'lower the min score or clear the search.' : 'click “+ demo corpus” to load 16 realistic postings, fetch a real source, or use the extension’s Harvest tab to read the LinkedIn/Naukri results page you already have open — Settings → Import takes pasted JSON from anything else.'}
+            {jobs.length
+              ? 'lower the min score or clear the search.'
+              : 'press fetch live jobs above (enable a source in Settings first), or use the extension’s Harvest tab to read the LinkedIn/Naukri results page you already have open — Settings → Import takes pasted JSON from anything else. Nothing appears on its own any more: there is no bundled corpus to fall back on, on purpose.'}
           </div>
         )}
         {list.map((j) => (

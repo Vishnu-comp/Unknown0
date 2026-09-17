@@ -191,19 +191,26 @@ let seededCount = 0;
 {
   const before = await get('/api/jobs');
   const had = before.count ?? (before.jobs || []).length;
-  if (!had || args.seed) {
-    // an empty store gets the offline demo corpus so the ranking means something;
-    // a populated one is left alone unless --seed says "merge the demo ones in anyway"
-    const seed = await post('/api/jobs/seed');
-    seededCount = seed.seeded ?? 0;
+  /* --seed is a dev flag now, not a convenience: the server refuses fixture seeding
+     unless ALLOW_FIXTURE_SEED=1, because loading fixed test jobs on an empty store
+     made this CLI look like it had ranked real openings when it had ranked nothing
+     real at all. The refusal is printed, never fatal — the resume/profile work above
+     is the point of this script. */
+  if (args.seed) {
+    try {
+      const seed = await post('/api/jobs/seed');
+      seededCount = seed.seeded ?? 0;
+    } catch (e) {
+      console.log(`  --seed refused: ${e.message}`);
+    }
   }
   const after = await get('/api/jobs');
   const now = after.count ?? (after.jobs || []).length;
   const note = seededCount
-    ? `${seededCount} demo postings seeded`
-    : had && !args.seed
-      ? `left as-is — pass --seed to add the demo corpus on top`
-      : 'empty — nothing to rank against';
+    ? `${seededCount} fixed test-job entries seeded (NOT real openings)`
+    : had
+      ? `already populated — left alone (pass --seed to merge the fixed test jobs on top)`
+      : 'empty — enable a source and POST /api/jobs/fetch, or push harvested rows to /api/jobs/import';
   console.log(`\njob store: ${now} postings (${note})`);
 }
 

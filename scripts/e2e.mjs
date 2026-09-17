@@ -74,7 +74,7 @@ function check(name, cond, extra = '') {
 if (SELF) {
   const port = 3210 + Math.floor(Math.random() * 90);
   BASE = `http://127.0.0.1:${port}`;
-  child = spawn(process.execPath, [path.resolve('server/index.mjs')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ATS_API_BASE: `http://127.0.0.1:${ATS_PORT}` }, stdio: ['ignore', 'pipe', 'pipe'] });
+  child = spawn(process.execPath, [path.resolve('server/index.mjs')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ATS_API_BASE: `http://127.0.0.1:${ATS_PORT}`, ALLOW_FIXTURE_SEED: '1', FETCH_ON_BOOT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   child.stdout.on('data', (b) => (out += b));
   child.stderr.on('data', (b) => (out += b));
@@ -92,7 +92,7 @@ console.log('1. meta + seed');
 const meta = await j('/api/meta');
 check('GET /api/meta', meta.status === 200 && meta.data.sources.length >= 6, `${meta.data.sources?.length} sources registered`);
 const seeded = await j('/api/jobs/seed', { method: 'POST' });
-check('POST /api/jobs/seed', seeded.status === 200 && seeded.data.seeded >= 10, `${seeded.data.seeded} postings`);
+check('POST /api/jobs/seed (test-only, ALLOW_FIXTURE_SEED=1)', seeded.status === 200 && seeded.data.seeded >= 10 && seeded.data.fixture === true, `${seeded.data.seeded} postings`);
 
 console.log('\n2. resume parsing (txt + suggestions)');
 const sample = fs.readFileSync(new URL('../data/samples/sample-resume.txt', import.meta.url), 'utf8');
@@ -207,7 +207,7 @@ check('mailto prepared when posting has apply email', Boolean(app.mailto), app.m
 console.log('\n5. auto-apply runner + policy guards');
 async function freshRunnerState({ dailyCap, perSourcePerDay }) {
   await j('/api/reset', { method: 'POST' });               // wipes applications + jobs + daily counters
-  await j('/api/jobs/seed', { method: 'POST' });           // deterministic corpus
+  await j('/api/jobs/seed', { method: 'POST' });           // deterministic fixture corpus
   const cur = (await j('/api/settings')).data.settings.autoApply;
   await j('/api/settings', { method: 'PUT', body: JSON.stringify({ autoApply: { ...cur, enabled: true, minScore: 70, dailyCap, perSourcePerDay, cooldownHours: 24 } }) });
 }

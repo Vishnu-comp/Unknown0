@@ -4,12 +4,49 @@
  *     salaryMin, salaryMax, salaryCurrency, postedAt, tags[], category }
  *
  * Adapters that need credentials are inert until you add them in Settings ->
- * Sources. `githubArchive` is credential-free so the app has live data
- * out of the box.
+ * Sources. `github_archive` is credential-free, so it is the default source on
+ * a fresh install — and the only one that survives a network that blocks
+ * everything but api.github.com.
+ *
+ * Settings keys and adapter keys do not arrive in the same shape: the default
+ * settings file predates SOURCES and uses camelCase booleans plus two list
+ * keys. resolveSourceConfigs() is the one place that reconciles them, so an
+ * old install still fetches instead of erroring "unknown source" forever.
  */
 import { normalize, parseDateLoose, extractSalary, truncate } from './text.mjs';
 
 const FETCH_TIMEOUT = Number(process.env.FETCH_TIMEOUT_MS || 9000);
+
+/**
+ * A transport failure and an empty board look identical upstream ("no jobs"), so
+ * every fetch here runs its error through this. Without it the user reads
+ * "fetch failed" and assumes the source is quiet; with it they read ECONNRESET
+ * and know their network (or a sandbox egress list) is the wall — and the way round it.
+ */
+function networkHint(url, e) {
+  const host = url.split('/')[2] || url;
+  /* Node reports transport failures as `TypeError: fetch failed` with the real
+     reason on e.cause.code, so the cause has to be consulted first — the message
+     alone would say nothing. */
+  const code = String(e?.cause?.code || e?.code || e?.message || '');
+  const transport =
+    /CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED|UNKNOWN_CA|DEPTH_ZERO/i.test(code)
+      ? 'TLS could not be verified — a filtering/inspecting proxy answered for this host'
+      : /ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ENETDOWN|ECONNRESET|ECONNABORTED|EPERM|EHOSTDOWN|network|getaddrinfo|ENOTFOUND/i.test(code)
+        ? 'unreachable from this machine'
+        : e?.name === 'AbortError' || /abort|timed out/i.test(code)
+          ? `no answer within ${FETCH_TIMEOUT / 1000}s`
+          : /fetch failed/i.test(code)
+            ? 'request failed at the network layer'
+            : null;
+  if (!transport) return e; // a real HTTP/parse error already carries its own explanation
+  return new Error(
+    `${host} → ${transport}${/CERT|SSL|TLS|UNABLE_TO_|SELF_SIGNED/i.test(code) ? '' : ` (${code})`}.` +
+    ' A blocked network looks exactly like a source with no jobs, so if you are in a' +
+    ' sandbox or behind an egress allowlist, expect this — use Settings → Import jobs' +
+    ' JSON, or the extension on a page you have open, instead.'
+  );
+}
 
 async function getJson(url, headers = {}) {
   const ctrl = new AbortController();
@@ -18,6 +55,8 @@ async function getJson(url, headers = {}) {
     const res = await fetch(url, { headers: { 'user-agent': 'ApplyFlow/0.1 (+self-hosted job matcher)', accept: 'application/json', ...headers }, signal: ctrl.signal });
     if (!res.ok) throw new Error(`${url.split('/')[2]} → HTTP ${res.status}`);
     return await res.json();
+  } catch (e) {
+    throw networkHint(url, e);
   } finally {
     clearTimeout(t);
   }
@@ -50,10 +89,9 @@ async function getDoc(url, headers = {}) {
     if (!res.ok) throw new Error(`${url.split('/')[2]} → HTTP ${res.status}`);
     return body;
   } catch (e) {
-    if (/fetch failed|ECONN|ENOTFOUND|network|abort/i.test(String(e?.cause?.code || e?.message))) {
-      throw new Error(`${url.split('/')[2]} → no route from this machine (${e?.cause?.code || e.message}). If you are running ApplyFlow in a sandbox or behind an egress allowlist, that is expected — use Settings → Import jobs JSON instead.`);
-    }
-    throw e;
+    /* The anti-bot branch above raised its own useful Error; networkHint only
+       rewrites transport failures, so that message passes through untouched. */
+    throw networkHint(url, e);
   } finally {
     clearTimeout(t);
   }
@@ -81,8 +119,10 @@ function base(job) {
 }
 
 /* ------------------------------ GitHub archive ----------------------------- */
-/* The archived public GitHub Jobs dataset (~19k postings) is a free,
-   key-less corpus. Great for demo + for testing the matcher honestly. */
+/* The archived public GitHub Jobs dataset (~19k postings): a real corpus, free and
+   key-less, though historical (the feed stopped in 2021) so treat it as backfill,
+   not as today's market. It is the one source reachable from most restricted
+   networks, because it only needs api.github.com. */
 async function githubArchive() {
   const raw = await getJson('https://api.github.com/repos/odmo/github-jobs/contents/jobs.json');
     const json = JSON.parse(Buffer.from(raw.content, raw.encoding || 'base64').toString('utf8'));
@@ -181,7 +221,10 @@ async function jooble(cfg) {
    Add board slugs in Settings (e.g. "airbnb", "stripe", "datadog"). */
 async function greenhouse(cfg) {
   const boards = cfg.boards || [];
+  if (!boards.length) throw new Error('greenhouse: no board slugs configured — add a few in Settings → Sources (stripe, datadog, ramp, coinbase, postman…). Nothing was fetched.');
   const out = [];
+  const unreachable = [];
+  const skipped = [];
   for (const slug of boards.slice(0, 12)) {
     try {
       const data = await getJson(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`);
@@ -203,17 +246,30 @@ async function greenhouse(cfg) {
           })
         );
       }
-    } catch {
-      /* board not found → skip, keep other boards */
+    } catch (e) {
+      /* One 404 is a typo or a shut board — skip it and keep the others. A transport
+         failure is not: silently returning [] there is how a blocked network gets
+         reported to the user as "this source had no jobs". */
+      /* A 4xx is a typo or a shut board: note it and keep the others. A transport
+         failure is not — reporting that as an empty list is how a blocked network
+         gets read as "this source has no jobs". */
+      if (/HTTP 4\d\d/i.test(e.message)) skipped.push(`${slug} → HTTP ${e.message.match(/\d{3}/)?.[0] || '?'}`);
+      else unreachable.push(`${slug}: ${e.message}`);
     }
   }
+  if (!out.length && unreachable.length) throw new Error(`greenhouse: ${unreachable.length} of ${Math.min(boards.length, 12)} board(s) unreachable → ${unreachable.join(' | ').slice(0, 400)}`);
+  if (skipped.length) console.log(`  greenhouse: skipped ${skipped.join(', ')}`);
   return out;
 }
 
 /* ------------------------------- Lever postings ----------------------------- */
 async function lever(cfg) {
+  const orgs = cfg.companies || [];
+  if (!orgs.length) throw new Error('lever: no org slugs configured — add a few in Settings → Sources (netflix, palantir, plaid…). Nothing was fetched.');
   const out = [];
-  for (const org of (cfg.companies || []).slice(0, 12)) {
+  const unreachable = [];
+  const skipped = [];
+  for (const org of orgs.slice(0, 12)) {
     try {
       const data = await getJson(`https://api.lever.co/v0/postings/${org}?mode=json`);
       for (const j of data || []) {
@@ -235,10 +291,13 @@ async function lever(cfg) {
           })
         );
       }
-    } catch {
-      /* skip */
+    } catch (e) {
+      if (/HTTP 4\d\d/i.test(e.message)) skipped.push(`${org} → HTTP ${e.message.match(/\d{3}/)?.[0] || '?'}`);
+      else unreachable.push(`${org}: ${e.message}`);
     }
   }
+  if (!out.length && unreachable.length) throw new Error(`lever: ${unreachable.length} of ${Math.min(orgs.length, 12)} org(s) unreachable → ${unreachable.join(' | ').slice(0, 400)}`);
+  if (skipped.length) console.log(`  lever: skipped ${skipped.join(', ')}`);
   return out;
 }
 
@@ -297,15 +356,14 @@ export async function normalizeImport(input, sourceHint = 'imported') {
     .filter((j) => j.title && j.title !== 'Untitled role' && j.url);
 }
 
-/* ----------------------------------- demo ---------------------------------- */
-async function demo() {
-  const mod = await import('../data/demoJobs.mjs');
-  return mod.default.map((j) => base({ ...j, source: 'demo' }));
-}
-
+/* There is deliberately no bundled/"demo" source here. A source that always
+   succeeds offline is how a matcher looks healthy while showing you 16
+   hand-written postings: the count is wrong, the salaries are fiction, and the
+   letters cite employers that never existed. Every entry below hits a real
+   endpoint or fails with a message that says so. Fixture data lives in
+   scripts/fixtures/ and reaches the store only through the test-only seed route. */
 export const SOURCES = {
   github_archive: { label: 'GitHub Jobs archive (no key)', needsKey: false, run: githubArchive },
-  demo: { label: 'Bundled demo corpus', needsKey: false, run: demo },
   adzuna: { label: 'Adzuna (Indeed/CareerBuilder/ZipRecruiter syndication)', needsKey: true, run: adzuna },
   jooble: { label: 'Jooble (career-page aggregation)', needsKey: true, run: jooble },
   greenhouse: { label: 'Greenhouse ATS boards', needsKey: false, run: greenhouse },
@@ -322,6 +380,70 @@ export const SOURCES = {
  * Fan out across enabled sources, upsert into the job store, and report
  * per-source status so the UI can show what actually succeeded.
  */
+/* ------------------------ settings → adapter configs ------------------------ */
+
+/* Credentials may live in the environment instead of the settings file. */
+const ENV_DEFAULTS = {
+  adzuna: () => ({ appId: process.env.ADZUNA_APP_ID, appKey: process.env.ADZUNA_APP_KEY, country: process.env.ADZUNA_COUNTRY || 'in' }),
+  jooble: () => ({ apiKey: process.env.JOOBLE_API_KEY }),
+};
+
+/* The default settings file predates SOURCES: camelCase booleans, and board lists
+   stored outside their adapter. Fold those into adapter keys before use, or a
+   fresh install "succeeds" at enabling sources and then errors on every fetch. */
+const RENAMED = { githubArchive: 'github_archive', github_archive_legacy: 'github_archive' };
+const LISTS = { greenhouseBoards: ['greenhouse', 'boards'], leverCompanies: ['lever', 'companies'] };
+
+/**
+ * Turn `settings.sources` into the array fetchAll expects.
+ * `dropped` exists so callers can say "this toggle points at no adapter"
+ * instead of letting a typo surface as 'unknown source' forever.
+ */
+export function resolveSourceConfigs(settings = {}, profile = null) {
+  const raw = settings.sources || {};
+  const out = new Map();
+  const dropped = [];
+  const put = (key, cfg) => {
+    if (!SOURCES[key]) return false;
+    out.set(key, { ...(out.get(key) || {}), ...(cfg || {}) });
+    return true;
+  };
+
+  for (const [k, v] of Object.entries(raw)) {
+    if (!v) continue;
+    if (LISTS[k]) {
+      const [key, field] = LISTS[k];
+      if (Array.isArray(v) && v.length) put(key, { [field]: v });
+      continue;
+    }
+    const key = RENAMED[k] || k;
+    if (!SOURCES[key]) {
+      if (typeof v !== 'object' || v.enabled !== false) dropped.push(k);
+      continue;
+    }
+    put(key, typeof v === 'object' ? v : {});
+  }
+  /* an adapter configured as {enabled:false} must not fetch */
+  for (const [key, cfg] of [...out]) if (cfg.enabled === false) out.delete(key);
+
+  const defaults = {
+    adzuna: () => ({
+      what: (profile?.targets?.titleKeywords || [])[0] || 'software engineer',
+      where: profile?.locations?.[0] || 'India',
+      resultsPerPage: 50,
+    }),
+  };
+  const enabled = [...out].map(([key, cfg]) => ({
+    key,
+    source: key,
+    ...(defaults[key]?.() || {}),
+    ...(ENV_DEFAULTS[key]?.() || {}),
+    ...cfg,
+  }));
+  return { enabled, dropped };
+}
+
+
 export async function fetchAll(enabledSources, profile) {
   const results = [];
   const errors = [];
@@ -335,7 +457,9 @@ export async function fetchAll(enabledSources, profile) {
       const jobs = await def.run({ ...s, profile });
       results.push(...jobs);
     } catch (e) {
-      errors.push(`${s.key}: ${e.message}`);
+      /* Adapters already name themselves in their own errors; don't print
+         "naukri: naukri: …" at the user. */
+      errors.push(e.message.startsWith(`${s.key}:`) ? e.message : `${s.key}: ${e.message}`);
     }
   }
   const map = new Map();

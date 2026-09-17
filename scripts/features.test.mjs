@@ -32,7 +32,7 @@ const { tailorResume, toAtsPlain } = await import('../server/lib/tailor.mjs');
 const { research, SIGNAL_COUNT } = await import('../server/lib/companyResearch.mjs');
 const { scoreJob, scoreWithInsights, candidateVector } = await import('../server/lib/match.mjs');
 const db = await import('../server/lib/db.mjs');
-const demoJobs = (await import('../server/data/demoJobs.mjs')).default;
+const demoJobs = (await import('./fixtures/jobFixtures.mjs')).default;
 
 const profile = structuredClone(db.DEFAULT_PROFILE);
 profile.experience[0].bullets = [
@@ -257,9 +257,9 @@ ok(adjSponsor.score < scoreJob(sponsor, profile, resume).score, 'sponsorship mis
 ok(rSponsor.warnings.some((w) => /skip/.test(w)), 'and says skip, in the warnings');
 ok(scoreWithInsights(sre, profile, cand, []).score === base.score, 'no insights → unchanged score');
 
-/* ------------------------------- real demo corpus ------------------------------- */
+/* ------------------------------ the fixture corpus ------------------------------ */
 
-console.log('\n· the shipped demo corpus');
+console.log('\n· the fixture corpus (scripts/fixtures/jobFixtures.mjs)');
 for (const job of demoJobs) {
   const t = tailorResume({ job, profile, resume, match: scoreJob(job, profile, resume) });
   const own = t.text.split('\n').filter((l) => l.trim().startsWith('•')).map((l) => l.replace(/^\s*•\s*/, '').trim());
@@ -278,7 +278,7 @@ for (const job of demoJobs) {
   if (r.warnings.length) warned += 1;
 }
 ok(researched === demoJobs.length, `research runs across the whole corpus (${researched} jobs)`);
-ok(warned >= 4, `the bad demo postings do get warnings (${warned}/${demoJobs.length}) — the matcher is not the only filter`);
+ok(warned >= 4, `the deliberately-bad fixture postings do get warnings (${warned}/${demoJobs.length}) — the matcher is not the only filter`);
 const salesJob = demoJobs.find((j) => /Inside Sales/i.test(j.title));
 const rSales = await research({ job: salesJob, profile });
 ok(rSales.coverage !== '0/' + SIGNAL_COUNT + ' signals found in this posting', 'even the worst posting yields *something* to show');

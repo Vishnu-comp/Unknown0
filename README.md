@@ -12,7 +12,7 @@ a public apply API, in which case it will do the whole thing, with your
 permission).
 
 ```
-sources (Adzuna · Jooble · Greenhouse · Lever · GitHub archive · demo)
+sources (Adzuna · Jooble · Greenhouse · Lever · GitHub archive · Naukri)
         ↓  normalize + dedupe
    job store (data/jobs.json)
         ↓  weighted match engine (9 components, explainable)
@@ -88,7 +88,7 @@ npm run dev
 ```
 
 To load your actual resume from the CLI instead of the browser (same endpoints
-the UI calls — parse it, propose a profile, seed the corpus, show the ranking):
+the UI calls — parse it, propose a profile, fetch jobs, show the ranking):
 
 ```bash
 node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15   # ~ works here
@@ -99,31 +99,45 @@ It only writes what your document states. The one number it deliberately leaves
 empty is the salary floor: a made-up expectation answers a real form with a
 real lie, and the score would quietly follow it.
 
-The store starts empty: click **Overview → "load demo corpus"** once (or
-`curl -X POST localhost:3000/api/jobs/seed`) to pull in 16 hand-written postings
-(`server/data/demoJobs.mjs`) so you can see scoring, letters and the pipeline
-with zero configuration and no network. Worked path:
+The store starts **empty, on purpose**. There is no bundled corpus to fill it: a
+matcher that always has something to show you is a matcher whose numbers nobody
+checked. On boot the server fetches from every enabled source (`github_archive` is
+on by default and needs no key), remembers the outcome in `data/fetchState.json`,
+and `GET /api/jobs/fetch-status` says exactly what it tried and what failed. A
+failed fetch is reported as a failure — never as "no jobs today".
 
-1. **Overview → load demo corpus** — one click, nothing else to configure
-2. **Resume → drop your PDF** (or paste text). `data/samples/sample-resume.pdf`
+Two ways listings get in, both real:
+
+1. **`POST /api/jobs/fetch`** — the "fetch live jobs" button. Needs outbound HTTPS.
+2. **Settings → Import jobs JSON**, or the extension's "send this page" button, for a
+   LinkedIn/Naukri tab you already have open. This is the path that works in a
+   locked-down sandbox, and it is still your data, not filler written for you.
+
+Worked path:
+
+1. **Resume → drop your PDF** (or paste text). `data/samples/sample-resume.pdf`
    is a real PDF you can test with.
-3. **Profile → fix the suggestions** the parser made (skills, work history, headline)
-4. **Job matches → set a field, a salary floor, exclude terms** (e.g. `staffing`, `BPO`)
-5. **Job matches → job intel tab**: see the posting's signals, and the resume
+2. **Profile → fix the suggestions** the parser made (skills, work history, headline)
+3. **Job matches → set a field, a salary floor, exclude terms** (e.g. `staffing`, `BPO`)
+4. **Job matches → job intel tab**: see the posting's signals, and the resume
    re-ordered for it (preview / copy plain text / download `.txt`)
-6. **Applications → review a pack → copy extension payload, or open the apply URL**
-7. **Greenhouse or Lever posting?** → *preview payload (dry run)*, read what would
+5. **Applications → review a pack → copy extension payload, or open the apply URL**
+6. **Greenhouse or Lever posting?** → *preview payload (dry run)*, read what would
    be sent, then **Settings → Direct ATS submit** on and `confirm + send now`
-8. **Settings → sources**: turn on Adzuna or Greenhouse for live postings
-9. **Run auto-apply** (top-right) — or let cron do it (see below)
+7. **Settings → sources**: turn on Adzuna, Greenhouse, Lever or Naukri for live
+   postings (the boot fetch can be silenced with `FETCH_ON_BOOT=0`)
+8. **Run auto-apply** (top-right) — or let cron do it (see below)
 
 ## Tests
 
 ```bash
 npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
-                    # · 82 harvester checks (Naukri/LinkedIn parsing) · 15 render probes
-                    # · 89 tailoring/intelligence/parsing checks
+                    # · 112 harvester + ingest-config checks (Naukri/LinkedIn parsing,
+                    #   settings→adapter resolution, how a failed fetch is reported,
+                    #   route order, and that the API makes no claim it did not measure)
+                    # · 15 render probes · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
+                    # = 380, and `npm run test:all` adds the 129 end-to-end ones = 509
 npm run test:e2e    # 129 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
@@ -168,7 +182,7 @@ screened out. ApplyFlow builds a per-posting version
 
 Nothing is generated. Every bullet in the output is a byte-for-byte copy of
 something already in your profile or parsed resume, and the test suite asserts
-exactly that for the whole demo corpus — a tailored resume that invents
+exactly that for the whole fixture corpus — a tailored resume that invents
 experience is not a feature, it's a career-risk. The UI shows the audit
 (which bullets moved, which were demoted, why), so you can see the reasoning.
 
@@ -254,7 +268,8 @@ curl -X POST localhost:3000/api/jobs/import -H 'content-type: application/json' 
              "location": "Bengaluru", "url": "https://www.linkedin.com/jobs/view/4123456789/",
              "salary": "₹30 - ₹45 Lakhs p.a.", "skills": ["Java", "Kafka"] }]
 }'
-# → {"imported":1,"skipped":0,"total":19,"bySource":{"demo":16,"linkedin":2,"naukri":1}}
+# → {"imported":1,"skipped":0,"total":3,"bySource":{"linkedin":2,"naukri":1}}
+#    (an empty store starts at 0 — nothing is seeded to make the number look better)
 ```
 
 A row needs only a `title` and a `url`; everything else is mapped from whatever
@@ -387,9 +402,8 @@ private VPS; if you expose it to the internet, put a password proxy in front —
 ```
 server/
   index.mjs           REST API + static UI hosting (Express)
-  data/demoJobs.mjs   bundled corpus
   lib/db.mjs          JSON store, default profile, field taxonomy
-  lib/ingest.mjs      source adapters + normalization + upsert
+  lib/ingest.mjs      source adapters + settings→adapter resolution + upsert
   lib/match.mjs       scoring engine (explainable)
   lib/text.mjs        tokenising, skill phrases, salary/date/seniority extraction
   lib/resume.mjs      PDF/DOCX/TXT extraction + profile suggestions
@@ -403,6 +417,7 @@ server/
 client/               React UI: Overview · Profile · Resume · Job matches · Applications · Settings
 extension/            MV3 prefiller (popup.html, content.js, lib/*.mjs synced at build)
 scripts/              build, dev, icons, sample generators, load-resume (CLI ingest), tests
+  fixtures/             jobFixtures.mjs — the only fixed jobs in the repo, test-only
                         fieldmap/fill · match invariants · tailoring+intelligence
                         · direct-submit · render probes · e2e
 ```

@@ -4,11 +4,7 @@ import { Panel, Field, Toggle, Spinner } from './ui.jsx';
 
 const SOURCE_GUIDE = {
   github_archive: {
-    help: 'The archived public GitHub Jobs corpus (~19k postings). No key, no signup. Great for testing the matcher; older postings.',
-    fields: [],
-  },
-  demo: {
-    help: 'The 16 hand-written postings bundled in server/data/demoJobs.mjs. Always available, offline.',
+    help: 'The archived public GitHub Jobs corpus (~19k real postings). No key, no signup — and it only needs api.github.com, which most networks allow even when they block everything else (a sandbox with npm-only egress will not even allow that). Historical (the feed stopped in 2021): good for backfill and for checking the matcher, not for today’s market.',
     fields: [],
   },
   adzuna: {
@@ -300,13 +296,32 @@ export function SettingsTab({ settings, setSettings, meta, refresh, busy, setBus
               <div>files</div><div className="mono small">profile · resume · jobs · applications · settings · runs</div>
               <div>llm key in env</div><div>{meta?.env?.llmKeyConfigured ? 'yes' : 'no'}</div>
             </div>
-            <div className="dim small mt8">Everything is plain JSON you can inspect, back up, or move to Postgres later.</div>
+            <div className="dim small mt8">Everything is plain JSON you can inspect, back up, or move to Postgres later. The job store holds only what you fetched or imported — there is no bundled corpus.</div>
           </div>
           <div>
             <h4 className="sec" style={{ marginTop: 0 }}>rebuild</h4>
             <div className="list">
               <button className="btn sm" disabled={busy} onClick={() => api.recompute().then((r) => { refresh(); toast(`re-scored ${r.jobs} jobs`); })}>re-score every job against current profile</button>
-              <button className="btn sm" disabled={busy} onClick={() => api.seed().then((r) => { refresh(); toast(r.message); })}>re-add demo corpus</button>
+              <button
+                className="btn sm"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const r = await api.fetchJobs(null);
+                    await refresh();
+                    toast(`${r.fetched} live jobs pulled${r.errors?.length ? ` · ${r.errors.length} source(s) errored` : ''}`, r.errors?.length ? 'warn' : 'ok', 8000);
+                  } catch (e) {
+                    /* The honest path: no fetch, no fake data, and a message that says
+                       which of the two it was. */
+                    toast(e.message, 'err', 12000);
+                  }
+                  setBusy(false);
+                }}
+              >
+                fetch live jobs now
+              </button>
+              <div className="dim small">the server also pulls from enabled sources on boot (disable with <span className="mono">FETCH_ON_BOOT=0</span>); there is no bundled corpus to “re-add” any more.</div>
               <button className="btn sm" disabled={busy} onClick={() => api.clearJobs().then(() => { refresh(); toast('job store cleared (applications kept)'); })}>clear job store</button>
             </div>
           </div>

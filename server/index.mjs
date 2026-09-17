@@ -15,15 +15,16 @@ import {
   saveApplications,
   getResume,
   saveResume,
+  read as readStore,
   write as writeStore,
   uid,
   FIELDS,
 } from './lib/db.mjs';
 import { scoreJob } from './lib/match.mjs';
 import { extractText, parseResume, suggestProfilePatch } from './lib/resume.mjs';
-import { SOURCES, fetchAll, normalizeImport } from './lib/ingest.mjs';
+import { SOURCES, fetchAll, normalizeImport, resolveSourceConfigs } from './lib/ingest.mjs';
 import { composeApplication, runAutoApply, transition, PIPELINE, countsToday, inferQuestions } from './lib/automation.mjs';
-import demoJobs from './data/demoJobs.mjs';
+import fixtures from '../scripts/fixtures/jobFixtures.mjs';
 import { tailorResume, toAtsPlain } from './lib/tailor.mjs';
 import { research } from './lib/companyResearch.mjs';
 import { scoreWithInsights, candidateVector } from './lib/match.mjs';
@@ -61,9 +62,11 @@ const ROUTES = `ApplyFlow API
   GET  /api/jobs/:id                  posting + match + inferred questions + submit support
   GET  /api/jobs/:id/research         posting intelligence + insight-adjusted score
   GET  /api/jobs/:id/tailored         resume re-ordered for this posting (?format=txt = download)
-  POST /api/jobs/fetch {sources:[]}   pull from enabled adapters
+  POST /api/jobs/fetch {sources:[]}   pull from enabled adapters (also run on boot)
   POST /api/jobs/import {jobs:[]}     paste / extension harvest → same normalised shape
-  POST /api/jobs/seed | /api/jobs/clear | /api/jobs/recompute
+  GET  /api/jobs/fetch-status         last realtime pull: when, which sources, errors
+  POST /api/jobs/clear | /api/jobs/recompute
+  POST /api/jobs/seed                 TEST-ONLY fixture load; needs ALLOW_FIXTURE_SEED=1
   POST /api/apps/draft {jobIds:[]}    compose letter + answers + prefill pack
   GET  /api/apps | PATCH /api/apps/:id | POST /api/apps/:id/status | DELETE /api/apps/:id
   GET  /api/apps/:id/prefill | /api/apps/:id/extension-payload | /api/apps/:id/tailored.txt
@@ -80,12 +83,53 @@ app.get('/', (req, res, next) => (req.query.api === undefined ? next() : res.typ
 
 /* ---------------------------------- meta ---------------------------------- */
 
+/**
+ * Does this machine reach the one keyless source at all? Asked once per 60s and
+ * cached, because the answer belongs next to an empty job list: "0 jobs" without it
+ * reads as "no jobs today" rather than "this machine has no egress".
+ */
+let egressCache = null;
+async function egressProbe() {
+  if (egressCache && Date.now() - egressCache.at < 60_000) return egressCache;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 1500);
+  try {
+    const res = await fetch('https://api.github.com/rate_limit', {
+      signal: ctrl.signal,
+      headers: { 'user-agent': 'ApplyFlow/0.1 (+self-hosted job matcher)', accept: 'application/json' },
+    });
+    egressCache = { at: Date.now(), out: res.ok || res.status === 401 || res.status === 403, note: `api.github.com → HTTP ${res.status}` };
+  } catch (e) {
+    egressCache = { at: Date.now(), out: false, note: `api.github.com → ${e?.cause?.code || e?.message || 'unreachable'}` };
+  } finally {
+    clearTimeout(t);
+  }
+  return egressCache;
+}
+
 app.get(
   '/api/meta',
-  handle((req, res) =>
-    json(res, {
+  handle(async (req, res) => {
+    /* Resolved once, used for three answers below, so "what is on", "what a fetch
+       would pull" and "what the toggle actually means" can never disagree. */
+    const resolved = resolveSourceConfigs(getSettings(), null);
+    const net = await egressProbe();
+    return json(res, {
       fields: FIELDS,
-      sources: Object.entries(SOURCES).map(([key, v]) => ({ key, label: v.label, needsKey: v.needsKey })),
+      /* `enabled` rides along per source so the UI can show what a fetch would
+         actually pull without a second request; `volatile` marks the sources that can
+         break upstream through no fault of yours. Only adapters the resolver would
+         actually run count as enabled — a settings key with no adapter behind it must
+         not look switched-on. */
+      sources: Object.entries(SOURCES).map(([key, v]) => ({
+        key,
+        label: v.label,
+        needsKey: v.needsKey,
+        volatile: Boolean(v.volatile),
+        enabled: resolved.enabled.some((e) => e.key === key),
+      })),
+      enabledSources: resolved.enabled.map((e) => e.key),
+      droppedSources: resolved.dropped,
       runtime: { node: process.versions.node, nodeOk: !nodeTooOld(), advice: nodeTooOld() ? nodeVersionAdvice() : null },
       pipeline: PIPELINE,
       env: {
@@ -93,12 +137,15 @@ app.get(
         adzunaKey: Boolean(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY),
         joobleKey: Boolean(process.env.JOOBLE_API_KEY),
         dataDir: path.relative(ROOT, DATA_DIR) || 'data',
-        outboundNet: 'sandbox-limited',
+        /* Measured, not assumed. A hardcoded 'sandbox-limited' told every self-hosted
+           user their network was restricted because the preview sandbox was. */
+        outboundNet: net.out ? 'open' : 'blocked',
+        outboundNote: net.note,
       },
       counts: countsToday(),
       version: '0.1.0',
-    })
-  )
+    });
+  })
 );
 
 /* --------------------------------- profile --------------------------------- */
@@ -237,6 +284,25 @@ app.get(
 );
 
 app.get(
+  '/api/jobs/fetch-status',
+  handle((req, res) => {
+    const state = readStore('fetchState', null);
+    /* Resolved through the same mapping the fetcher uses, so the UI never offers a
+       toggle that the server would answer 'unknown source' to. */
+    const { enabled, dropped } = resolveSourceConfigs(getSettings(), null);
+    const keys = enabled.map((e) => e.key);
+    json(res, {
+      lastFetch: state,
+      enabledSources: keys,
+      droppedSources: dropped,
+      storeCount: getJobs().length,
+      sourcesOn: keys.length,
+      configured: Object.keys(getSettings()?.sources || {}).filter((k) => Boolean(getSettings().sources[k])).length,
+    });
+  })
+);
+
+app.get(
   '/api/jobs/:id',
   handle((req, res) => {
     const job = getJobs().find((j) => j.id === req.params.id);
@@ -305,50 +371,89 @@ app.post(
   })
 );
 
+/* Test-only, off unless ALLOW_FIXTURE_SEED=1. The app no longer has a demo mode:
+   a corpus that always loads offline is how a matcher can look healthy while every
+   count, salary and employer in it is invented. e2e and the CLI set the flag and
+   hit this; a user pressing a button in the UI never does, and if the route is
+   reached without the flag it says what to do instead of quietly seeding fakes. */
 app.post(
   '/api/jobs/seed',
   handle((req, res) => {
+    if (process.env.ALLOW_FIXTURE_SEED !== '1') {
+      throw bad('Fixture seeding is test-only and disabled here (set ALLOW_FIXTURE_SEED=1 to run the suites). For real jobs: POST /api/jobs/fetch, or POST /api/jobs/import with rows you harvested.');
+    }
     const profile = getProfile();
-    const jobs = mergeJobs(demoJobs.map((j) => ({ ...j, source: 'demo' })), getJobs());
+    const jobs = mergeJobs(fixtures.map((j) => ({ ...j, source: 'fixture' })), getJobs());
     saveJobs(jobs.map((j) => ({ ...j, matchedAt: new Date().toISOString() })));
     json(res, {
       seeded: jobs.length,
-      message: `Loaded ${jobs.length} demo postings. Enable real sources in Settings → Sources for live data.`,
+      fixture: true,
+      message: `Loaded ${jobs.length} FIXED TEST JOBS — not real openings. Use /api/jobs/fetch for live data.`,
     });
   })
 );
 
+/* ---------------------------- realtime ingest (shared) ---------------------------- */
+/**
+ * One implementation for the button, the boot fetch and the runner, so "I pressed
+ * fetch" and "it fetched on its own" cannot drift into different behaviours.
+ *
+ * `source` is recorded per attempt and the outcome is persisted even when it is a
+ * failure: a fetch that silently did nothing is the exact bug that makes a matcher
+ * sit at "no jobs in Bengaluru" for a week. Keeping lastFetch means the UI can say
+ * when it last tried and what came back, instead of the user guessing.
+ */
+async function ingestFromSources({ keys = null, profile = null } = {}) {
+  const st = getSettings();
+  const who = profile || getProfile();
+  const raw = st.sources || {};
+  /* `keys` (explicit request) overrides the enabled set, but keeps whatever
+     config that source already has — boards, keys, query terms. */
+  const scoped = keys && keys.length
+    ? Object.fromEntries(keys.map((k) => [k, raw[k] && typeof raw[k] === 'object' ? raw[k] : true]))
+    : raw;
+  const { enabled, dropped } = resolveSourceConfigs({ ...st, sources: scoped }, who);
+  if (!enabled.length) {
+    return {
+      ok: false,
+      why: 'no-sources',
+      error:
+        'Nothing to fetch from. ' +
+        (dropped.length
+          ? `These are enabled but match no adapter: ${dropped.join(', ')}. Known: ${Object.keys(SOURCES).join(', ')}.`
+          : 'Turn a source on in Settings → Sources (Adzuna and Jooble need a free key; github_archive, greenhouse, lever and naukri do not).') +
+        ' Alternatively hand me listings yourself: Settings → Import jobs JSON, or the browser extension’s “send this page” button.',
+    };
+  }
+  const { jobs, errors, fetchedAt } = await fetchAll(enabled, who);
+  const state = { at: fetchedAt || new Date().toISOString(), attempted: enabled.map((e) => e.key), fetched: jobs.length, errors, ok: jobs.length > 0 };
+  writeStore('fetchState', state);
+  if (!jobs.length) {
+    return {
+      ok: false,
+      why: 'empty',
+      state,
+      error:
+        `Nothing came back from: ${enabled.map((e) => e.key).join(', ')}.` +
+        (errors.length ? ` Errors → ${errors.join(' | ')}` : '') +
+        ' — nothing was merged, so the store still holds your last good jobs. A blocked or filtered network looks exactly like a quiet board, so check the errors above before assuming there are no jobs.',
+    };
+  }
+  const merged = mergeJobs(jobs, getJobs());
+  saveJobs(merged.map((j) => ({ ...j, matchedAt: new Date().toISOString() })));
+  recomputeAll(who);
+  return { ok: true, fetched: jobs.length, total: merged.length, errors, fetchedAt, state };
+}
+
 app.post(
   '/api/jobs/fetch',
   handle(async (req, res) => {
-    const st = getSettings();
-    const profile = getProfile();
-    const wanted = Array.isArray(req.body?.sources) && req.body.sources.length ? req.body.sources : Object.keys(st.sources || {}).filter((k) => st.sources[k]);
-    const enabled = wanted.map((key) => {
-      const cfg = st.sources?.[key];
-      const obj = cfg && typeof cfg === 'object' ? cfg : {};
-      const env = key.startsWith('adzuna')
-        ? { appId: process.env.ADZUNA_APP_ID, appKey: process.env.ADZUNA_APP_KEY, country: process.env.ADZUNA_COUNTRY || 'in' }
-        : key.startsWith('jooble')
-        ? { apiKey: process.env.JOOBLE_API_KEY }
-        : {};
-      const defaults = key.startsWith('adzuna') ? { what: (profile.targets?.titleKeywords || [])[0] || 'software engineer', where: profile.location?.city || '' } : {};
-      return { key, ...defaults, ...env, ...obj };
-    });
-    if (!enabled.length) throw bad('No sources enabled. Turn one on in Settings → Sources, or seed the demo corpus.');
-    const { jobs, errors, fetchedAt } = await fetchAll(enabled, profile);
-    if (!jobs.length) {
-      throw bad(
-        `Nothing came back from: ${enabled.map((e) => e.key).join(', ')}.` +
-          (errors.length ? ` Errors → ${errors.join(' | ')}` : '') +
-          ' — note: this preview sandbox only allows outbound npm + api.github.com traffic. On your own machine these fetch real jobs.'
-      );
-    }
-    const merged = mergeJobs(jobs, getJobs());
-    saveJobs(merged.map((j) => ({ ...j, matchedAt: new Date().toISOString() })));
-    json(res, { fetched: jobs.length, total: merged.length, errors, fetchedAt });
+    const r = await ingestFromSources({ keys: Array.isArray(req.body?.sources) && req.body.sources.length ? req.body.sources : null });
+    if (!r.ok) throw bad(r.error);
+    json(res, { fetched: r.fetched, total: r.total, errors: r.errors, fetchedAt: r.fetchedAt });
   })
 );
+
 
 /* ------------------------------ applications ------------------------------ */
 
@@ -797,9 +902,30 @@ app.use((req, res) => {
 const PORT = Number(process.env.PORT || 3000);
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   guardNodeVersion({ hard: true });
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`ApplyFlow → http://localhost:${PORT}  (data: ${DATA_DIR})`);
     if (nodeTooOld()) console.log(`  ⚠ ${nodeVersionAdvice()}`);
+    /* Realtime by default: with no demo corpus to fall back on, an empty store on
+       a fresh boot would just look broken. So pull from whatever the user enabled,
+       in the background — a slow or blocked board must never delay the port or
+       crash the app. Set FETCH_ON_BOOT=0 to opt out (a cron job is the other way to
+       schedule this). The outcome lands in data/fetchState.json and is readable at
+       GET /api/jobs/fetch-status, so a failed boot fetch is visible, not swallowed. */
+    if (process.env.FETCH_ON_BOOT !== '0') {
+      try {
+        const enabled = Object.keys(getSettings()?.sources || {}).filter((k) => getSettings().sources[k]);
+        if (!enabled.length) {
+          console.log(`  · no jobs in the store and no sources enabled — turn one on in Settings → Sources, or push harvested rows to POST /api/jobs/import`);
+        } else if (!getJobs().length || process.env.FETCH_ON_BOOT === 'force') {
+          const r = await ingestFromSources({ keys: enabled });
+          console.log(r.ok
+            ? `  · boot fetch: ${r.fetched} real postings from ${enabled.join(', ')} (store: ${r.total})`
+            : `  ⚠ boot fetch found nothing — ${r.error}`);
+        }
+      } catch (e) {
+        console.log(`  ⚠ boot fetch threw (ignored, app is up): ${e?.message || e}`);
+      }
+    }
   });
 }
 

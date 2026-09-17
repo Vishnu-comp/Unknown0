@@ -55,8 +55,8 @@ export const api = {
   jobResearch: (id) => req('GET', `/api/jobs/${id}/research`),
   jobTailored: (id) => req('GET', `/api/jobs/${id}/tailored`),
   tailoredUrl: (id) => `/api/jobs/${id}/tailored?format=txt`,
-  seed: () => req('POST', '/api/jobs/seed'),
   fetchJobs: (sources) => req('POST', '/api/jobs/fetch', { sources }),
+  fetchStatus: () => req('GET', '/api/jobs/fetch-status'),
   recompute: () => req('POST', '/api/jobs/recompute'),
   clearJobs: () => req('POST', '/api/jobs/clear'),
 

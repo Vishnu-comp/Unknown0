@@ -45,14 +45,22 @@ npm run build          # → public/app.js + public/index.html + extension/lib s
 npm start              # → ApplyFlow → http://localhost:3000
 ```
 
-Then open **http://localhost:3000** and click **Overview → "load demo corpus"**
-(or **Job matches → "+ demo corpus"**).
+Then open **http://localhost:3000**. The job store is **empty** and stays empty
+until real listings arrive — there is no bundled corpus to click, on purpose. A
+filler corpus is how a matcher looks healthy while every count, salary and
+employer in it is invented.
 
-> The store does **not** seed itself. On a brand-new `data/` you get a profile
-> form and zero jobs until you press that button or run
-> `curl -X POST localhost:3000/api/jobs/seed`. The 16 demo postings are
-> hand-written (`server/data/demoJobs.mjs`) and work offline, so the app is
-> never quietly empty because a network fetch failed.
+> On boot the server fetches from every enabled source (`github_archive` is on by
+> default and needs no key), then remembers the outcome in `data/fetchState.json`.
+> `GET /api/jobs/fetch-status` reports what it tried, what it got and what failed;
+> the "fetch live jobs" button in the UI reads the same thing. **A failed fetch is
+> shown as a failure, never as "no jobs today"** — those two states are not the same
+> and conflating them is how a blocked network becomes an empty pipeline.
+>
+> In a sandbox or behind an egress allowlist, expect that fetch to fail. Use
+> **Settings → Import jobs JSON** (or the extension's "send this page") to hand the
+> app listings from a tab you already have open: that path needs no server-side
+> network access and it is still your data, not mine.
 
 Data lives in `./data/*.json` — plain files, git-ignored, safe to delete.
 
@@ -62,7 +70,7 @@ Data lives in `./data/*.json` — plain files, git-ignored, safe to delete.
 |---|---|
 | `npm install` | 7 runtime deps (express, react, react-dom, esbuild, pdfjs-dist, adm-zip, multer) + 2 dev (jsdom, pngjs) |
 | `npm run build` | esbuild-bundles `client/main.jsx` → `public/app.js`, copies `index.html` + `styles.css`, then copies `server/lib/{fieldmap,fill}.mjs` into `extension/lib/` so the extension and server can never disagree about form mapping |
-| `npm start` | `node server/index.mjs` — API + static UI on one port, binds `0.0.0.0` |
+| `npm start` | `node server/index.mjs` — API + static UI on one port, binds `0.0.0.0`. Env: `PORT`, `DATA_DIR`, `FETCH_ON_BOOT=0` to skip the boot fetch, `ALLOW_FIXTURE_SEED=1` for the test suites only, `FETCH_TIMEOUT_MS` |
 | `npm run dev` | same server **plus** esbuild in watch mode; restarts the API when `server/**` changes. Use this if you edit anything |
 
 `public/` is git-ignored on purpose, so a fresh `git clone` must run `npm run build`
@@ -90,7 +98,7 @@ Flags (all optional except `--resume`):
 | `--field=<id>` | override the target field (e.g. `data_science`) |
 | `--remote` | set `openToRemote: true` |
 | `--dump=<path>` | write the extracted text and exit (`--dump=stdout` prints only) — how to tell whether a mis-parse is the PDF's fault or the parser's |
-| `--seed` | force a re-seed of the 16 demo postings. An **empty** store gets them anyway; a populated one is left alone unless you pass this |
+| `--seed` | load the fixed test corpus instead of fetching. Only works if the server was started with `ALLOW_FIXTURE_SEED=1`; otherwise it refuses and points at the real paths (`/api/jobs/fetch`, `/api/jobs/import`) |
 
 The app must already be running (it calls the HTTP API — there is no direct
 DB writer, which is why nothing can half-apply a profile).
@@ -108,8 +116,9 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, ~6 seconds, no network
-npm run test:harvest   # harvester alone (jsdom fixtures for the LinkedIn/Naukri scrapers)
+npm test               # 6 suites, 380 checks, ~6 seconds
+npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
+                       # scrapers, settings→adapter resolution, how fetch failures are reported)
 npm run test:e2e       # 129 checks; boots its own server on a random port :3210-3299
 npm run test:all       # both
 ```
@@ -120,11 +129,11 @@ npm run test:all       # both
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 15 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
-| `test:harvest` — `scripts/harvest.test.mjs` | 82 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
+| `test:harvest` — `scripts/harvest.test.mjs` | 112 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 129 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**250 + 82 harvester + 15 render = 358 checks, plus 129 end-to-end.** Current tree: all green
+**53 + 30 + 112 + 15 + 89 + 76 = 380 checks, plus 129 end-to-end = 509.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -143,7 +152,7 @@ npm ls pdfjs-dist jsdom                    # both must stay on the pinned majors
 your real profile or application history; it removes the directory at the end.
 `test:ats` stands up its mock ATS in-process on a random port — no Greenhouse
 account, no network. If you run e2e without `--own-server` against a live app,
-expect it to re-draft and re-score demo apps in that instance: it writes.
+expect it to re-draft and re-score real apps in that instance: it writes.
 
 ---
 
@@ -244,7 +253,7 @@ curl localhost:3000/api/profile                   # + completeness %
 curl localhost:3000/api/export/pack.md            # letters + answers + tailored resumes
 curl localhost:3000/api/export/prefill.json       # the extension batch payload
 curl -X POST localhost:3000/api/apps/draft \
-  -H 'content-type: application/json' -d '{"jobIds":["demo_3"],"force":true}'
+  -H 'content-type: application/json' -d '{"jobIds":["demo_3"],"force":true}'   # ids keep the demo_ prefix from the fixture file
 ```
 
 Per-app: `/api/apps/:id/tailored.txt`, `/api/apps/:id/prefill`,
@@ -259,12 +268,12 @@ send `{"confirm":true}`). Submissions log to `/api/submissions`.
 |---|---|
 | blank page, console 404 on `/app.js` | you skipped `npm run build` |
 | `EADDRINUSE :::3000` | something already on the port: `PORT=3100 npm start`, then `--base=http://127.0.0.1:3100` for the CLI |
-| Jobs tab empty on a fresh checkout | by design — press "load demo corpus" or `POST /api/jobs/seed` |
+| Jobs tab empty on a fresh checkout | by design — press "fetch live jobs", or import listings via Settings → Import jobs JSON. `POST /api/jobs/seed` is test-only and answers 400 unless the server has `ALLOW_FIXTURE_SEED=1` |
 | `Cannot find module 'adm-zip'` | ran a script from outside the repo root — `cd` into the checkout first |
 | resume parses to a name and nothing else | the PDF is an image; it has no text layer. Use the `.docx`/`.txt` export |
 | `The PDF reader could not load inside this Node process` | Node too old for the pinned pdfjs, or someone bumped it past 3.x on a Node 18 box (see §0) — nothing wrong with your file |
 | `no such file: ~/Downloads/x.pdf` | your shell left a literal `~` inside the flag value. The script expands `~` itself now, so this means the file really isn't there — it lists what *is* in that folder |
-| every live source errors `connect EHOSTUNREACH`/`000` | you're in the sandbox: only npm + `api.github.com` egress. Expected; use the demo corpus |
+| every live source errors `no route from this machine` / `EHOSTUNREACH` / `000` | you're in a sandbox or behind an egress allowlist: only npm + `api.github.com` get out. Expected; use Settings → Import jobs JSON. `GET /api/jobs/fetch-status` keeps the last attempt's per-source errors so you can read them after a reboot |
 | extension fills nothing | it only reads a copied payload — re-run "copy extension payload", then Reload the extension after `npm run build` |
 
 ---

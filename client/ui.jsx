@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function Panel({ title, sub, right, children, foot }) {
   return (
@@ -192,4 +192,77 @@ export function fmtMoney(n, cur) {
   if (cur === 'INR' && n >= 100000) return `${sym}${(n / 100000).toFixed(n >= 1000000 ? 0 : 1)}L`;
   if (n >= 1000) return `${sym}${Math.round(n / 1000)}k`;
   return `${sym}${n}`;
+}
+
+/**
+ * The one "get me real jobs" control, shared by the dashboard and the Jobs tab so
+ * the two views cannot offer different things (they used to offer a demo-corpus
+ * button, which is exactly what this replaced).
+ *
+ * It fetches, then says what happened rather than just changing a number: after a
+ * silent failure the difference between "no sources enabled" and "Adzuna rejected
+ * my key" is the difference between fixing it and not.
+ */
+export function RealtimeActions({ meta, refresh, busy, setBusy, toast, variant = 'sm', hint = true }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+  /* /api/meta gives sources as [{key, label, needsKey}] and enabledSources as a list
+     of keys; either may be missing on an old server, so both fall back. Enabled wins
+     over key-less: if the user turned on Adzuna, that is what they mean by "fetch". */
+  const listed = meta?.sources || [];
+  const enabled = meta?.enabledSources?.length ? meta.enabledSources : listed.filter((s) => s.enabled).map((s) => s.key);
+  const keyless = listed.filter((s) => !s.needsKey).map((s) => s.key);
+  const targets = enabled.length ? enabled : keyless;
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/jobs/fetch-status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => alive && setStatus(d))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function go() {
+    if (!targets.length) {
+      toast?.('No sources enabled yet — turn one on in Settings → Sources (Greenhouse, Lever, the GitHub archive and Naukri need no key).', 'warn', 9000);
+      return;
+    }
+    setBusy?.(true);
+    setLoading(true);
+    try {
+      const r = await fetch('/api/jobs/fetch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sources: targets }) }).then(async (res) => {
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        return d;
+      });
+      await refresh?.();
+      toast?.(`${r.fetched} real postings from ${targets.length} source(s)${r.errors?.length ? ` · ${r.errors.length} errored` : ''}`, r.errors?.length ? 'warn' : 'ok', 8000);
+    } catch (e) {
+      toast?.(e.message, 'err', 12000);
+    } finally {
+      setLoading(false);
+      setBusy?.(false);
+    }
+  }
+
+  return (
+    <div className="flexr" style={{ gap: 8, flexWrap: 'wrap' }}>
+      <button className={`btn ${variant} primary`} disabled={busy || loading} onClick={go} title={targets.length ? `pulls: ${targets.join(', ')}` : 'no sources enabled yet'}>
+        {loading ? <Spinner text="pulling live jobs…" /> : `fetch live jobs${targets.length ? ` (${targets.length})` : ''}`}
+      </button>
+      {hint && (
+        <span className="dim small">
+          {status?.lastFetch
+            ? status.lastFetch.ok
+              ? `last pull ${postedAgo(status.lastFetch.at)} · ${status.lastFetch.fetched} jobs from ${status.lastFetch.attempted?.join(', ')}`
+              : `last pull ${postedAgo(status.lastFetch.at)} found nothing (${(status.lastFetch.errors || []).length} error(s))`
+            : 'nothing fetched yet on this install'}
+          {' · or read a page you already have open: extension → Harvest → import'}
+        </span>
+      )}
+    </div>
+  );
 }

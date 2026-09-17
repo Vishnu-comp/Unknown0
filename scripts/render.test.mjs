@@ -11,7 +11,7 @@ import { JobsTab, JobModal } from '../client/JobsTab.jsx';
 import { AppsTab } from '../client/AppsTab.jsx';
 import { SettingsTab } from '../client/SettingsTab.jsx';
 import { DEFAULT_PROFILE } from '../server/lib/db.mjs';
-import demoJobs from '../server/data/demoJobs.mjs';
+import demoJobs from './fixtures/jobFixtures.mjs';
 import { scoreJob } from '../server/lib/match.mjs';
 
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -31,7 +31,7 @@ const apps = [
     jobId: 'job_0',
     title: 'Senior Full Stack Engineer',
     company: 'Zerodha',
-    source: 'demo',
+    source: 'fixture',
     url: 'https://example.test/apply',
     status: 'ready',
     score: 91,
@@ -76,7 +76,7 @@ const meta = {
   sources: [{ key: 'adzuna', label: 'Adzuna', needsKey: true }],
   pipeline: ['queued', 'drafted', 'ready', 'submitted'],
   autoApply: { enabled: true, minScore: 70, dailyCap: 10, perSourcePerDay: 4, cooldownHours: 24, mode: 'assist' },
-  counts: { total: 3, bySource: { demo: 3 } },
+  counts: { total: 3, bySource: { fixture: 3 } },
   env: { dataDir: 'data' },
 };
 const settings = { autoApply: meta.autoApply, llm: { provider: 'none' }, sources: { adzuna: false } };

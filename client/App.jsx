@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, toast, onToast } from './api.js';
-import { Panel, Ring, Spinner, useLocal, timeAgo, Bar } from './ui.jsx';
+import { Panel, Ring, Spinner, useLocal, timeAgo, Bar, RealtimeActions } from './ui.jsx';
 import { ProfileTab, ResumeTab } from './ProfileTab.jsx';
 import { JobsTab } from './JobsTab.jsx';
 import { AppsTab } from './AppsTab.jsx';
@@ -66,11 +66,10 @@ export default function App() {
         await refresh('all');
         const r = await api.resume();
         setResume(r.resume);
-        if ((m.counts?.total ?? 0) === 0 && !(await api.jobs({})).count) {
-          // first run ever: give them something to look at
-          await api.seed();
-          await refresh('jobs');
-        }
+        /* Nothing is seeded on first run, on purpose. The old "give them something to
+           look at" behaviour filled the store with hand-written postings, so a new
+           user's first scores, letters and prefill payloads were fiction. The server
+           pulls live data on boot instead (see FETCH_ON_BOOT in server/index.mjs). */
       } catch (e) {
         setError(e.message);
       }
@@ -235,7 +234,7 @@ function Dashboard({ meta, profile, completeness, jobs, apps, appStats, resume, 
 
           <div className="grid cols-4">
             <Stat k="profile ready" v={`${completeness.percent}%`} n={`${completeness.items.filter((i) => i.value).length}/${completeness.items.length} checks`} />
-            <Stat k="jobs in store" v={jobs.length} n={jobs.length ? `${[...new Set(jobs.map((j) => j.source))].length} source(s)` : 'seed the demo corpus →'} />
+            <Stat k="jobs in store" v={jobs.length} n={jobs.length ? `${[...new Set(jobs.map((j) => j.source))].length} source(s)` : 'nothing real yet → fetch, or harvest a page you have open'} />
             <Stat k="drafted today" v={counts.total || 0} n={`cap ${settings?.autoApply?.dailyCap ?? 10}/day`} />
             <Stat k="awaiting your send" v={ready} n={submitted ? `${submitted} already submitted` : 'nothing submitted yet'} />
           </div>
@@ -265,23 +264,7 @@ function Dashboard({ meta, profile, completeness, jobs, apps, appStats, resume, 
               {(profile.targets?.excludeKeywords || []).slice(0, 6).join(', ') || 'none'}
             </div>
             <div className="btn-row mt12">
-              <button
-                className="btn sm"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    const r = await api.seed();
-                    await refresh('jobs');
-                    toast(r.message);
-                  } catch (e) {
-                    toast(e.message, 'err');
-                  }
-                  setBusy(false);
-                }}
-              >
-                load demo corpus
-              </button>
+              <RealtimeActions meta={meta} refresh={() => refresh('jobs')} busy={busy} setBusy={setBusy} toast={toast} variant="sm" />
               <button className="btn sm" disabled={busy} onClick={() => setTab('jobs')}>review matches →</button>
               <button
                 className="btn sm primary"
@@ -303,7 +286,13 @@ function Dashboard({ meta, profile, completeness, jobs, apps, appStats, resume, 
           </Panel>
 
           <Panel title="Top matches right now" right={<button className="btn sm ghost" onClick={() => setTab('jobs')}>all {jobs.length} →</button>}>
-            {!top.length && <div className="empty"><b>no jobs yet</b>load the demo corpus (works offline) or enable Adzuna / Jooble / Greenhouse in settings.</div>}
+            {!top.length && (
+              <div className="empty">
+                <b>no jobs in the store — and there is no offline filler any more</b>
+                enable a source in Settings → Sources and press <i>fetch live jobs</i>, or read a page you already have open with the extension (Harvest → import).
+                A fetch that is blocked or rate-limited will tell you so here rather than showing you made-up postings.
+              </div>
+            )}
             {top.map((j) => (
               <div className="job" key={j.id} style={{ gridTemplateColumns: '54px 1fr auto' }}>
                 <Ring score={j.match.score} size={44} />
@@ -373,7 +362,12 @@ function Dashboard({ meta, profile, completeness, jobs, apps, appStats, resume, 
               <div>Adzuna</div><div>{meta.env.adzunaKey ? 'present ✓' : 'needs keys'}</div>
               <div>Jooble</div><div>{meta.env.joobleKey ? 'present ✓' : 'needs key'}</div>
               <div>data dir</div><div className="mono small">{meta.env.dataDir}</div>
-              <div>outbound net</div><div className="small">{meta.env.outboundNet === 'sandbox-limited' ? 'preview sandbox blocks most hosts — run locally for live fetches' : 'open'}</div>
+              <div>outbound net</div>
+              <div className="small" title={meta.env.outboundNote || ''}>
+                {meta.env.outboundNet === 'open'
+                  ? 'api.github.com reachable — live fetches will work'
+                  : <>blocked here <span className="dim">({meta.env.outboundNote || 'unreachable'})</span> — import listings instead</>}
+              </div>
             </div>
           </Panel>
         </div>

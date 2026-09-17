@@ -251,6 +251,95 @@ ok(indexMjs.includes("'/api/jobs/import'"), 'server exposes POST /api/jobs/impor
    other POST routes on the same prefix, where registration order decides. */
 const atImport = indexMjs.indexOf("'/api/jobs/import'");
 const atClear = indexMjs.indexOf("'/api/jobs/clear'");
+/* Two error-reporting rules, both learned the hard way today:
+   1. Node hides the real reason for a failed fetch on e.cause.code ("fetch failed"
+      is the whole message). A TLS-intercepting egress proxy answers with
+      UNABLE_TO_VERIFY_LEAF_SIGNATURE, which matches none of the ECONN/ENOTFOUND family, so the
+      first version of networkHint() still printed a useless "fetch failed".
+   2. A bare `catch {}` around a per-board fetch turns "the network is blocked" into
+      an empty list, which the app then reports as "this source had no jobs".
+   Both are silent-failure classes, which is what this product can least afford. */
+ok(/CERT\|SSL\|TLS\|UNABLE_TO_/.test(ingestMjs), 'networkHint recognises TLS-interception codes, not just ECONN*');
+ok(!/greenhouse: \$\{failed\.length\}/.test(ingestMjs), 'greenhouse distinguishes unreachable boards from empty ones');
+ok(/no board slugs configured/.test(ingestMjs) && /no org slugs configured/.test(ingestMjs), 'ATS adapters say "not configured" instead of returning nothing');
+{
+  const { SOURCES } = await import(path.join(root, 'server/lib/ingest.mjs'));
+  const thrown = await SOURCES.greenhouse.run({}).then(() => null, (e) => e.message);
+  ok(/no board slugs configured/.test(thrown || ''), 'unconfigured greenhouse throws rather than reporting 0 jobs', String(thrown).slice(0, 60));
+  const unreachable = await SOURCES.lever.run({ companies: ['this-org-does-not-exist-applyflow-test'] }).then(() => null, (e) => e.message);
+  ok(/unreachable|not published|HTTP/.test(unreachable || ''), 'a lever org that cannot be reached is an error, never an empty list', String(unreachable).slice(0, 70));
+}
+
+/* No demo corpus anywhere in the shipped product: the fixture file lives under
+   scripts/, the seed route needs an env flag, and no view can call seed at all.
+   These are cheap to assert and expensive to lose — a reintroduced "load demo"
+   button is exactly the kind of regression that looks like a working install while
+   showing invented employers, fake salaries and scores nothing should trust. */
+ok(!fs.existsSync(path.join(root, 'server/data/demoJobs.mjs')), 'the bundled demo corpus is gone from server/');
+ok(fs.existsSync(path.join(root, 'scripts/fixtures/jobFixtures.mjs')), 'fixture jobs now live under scripts/fixtures (test data, not product data)');
+ok(indexMjs.includes("ALLOW_FIXTURE_SEED !== '1'"), 'seed route refuses to run outside tests');
+ok(!/seed:\s*\(\)\s*=>/.test(fs.readFileSync(path.join(root, 'client/api.js'), 'utf8')), 'the client API no longer exposes a seed call');
+for (const f of ['App.jsx', 'JobsTab.jsx', 'SettingsTab.jsx', 'ui.jsx']) {
+  ok(!/api\.seed\(|demo corpus|demoJobs/i.test(fs.readFileSync(path.join(root, 'client', f), 'utf8')), `client/${f} has no demo-corpus affordance`);
+}
+ok(/RealtimeActions/.test(fs.readFileSync(path.join(root, 'client/ui.jsx'), 'utf8')), 'ui.jsx owns the single fetch-live control');
+ok(indexMjs.includes('fetch-status'), 'the app can report when it last fetched and what failed');
+ok(indexMjs.includes('FETCH_ON_BOOT'), 'boot-time fetching is wired and can be turned off');
+
+/* resolveSourceConfigs: settings.sources is written by three different eras of
+   this app — camelCase booleans in the shipped defaults, board lists parked in
+   their own keys, and per-adapter objects from the Settings UI. Before this
+   resolver existed, a FRESH install fetched the literal keys `githubArchive`,
+   `greenhouseBoards` and `leverCompanies`, none of which is an adapter, so every
+   fetch died with "unknown source" and the empty store looked like the user's
+   fault. These cases are what keep that from coming back. */
+{
+  const { resolveSourceConfigs } = await import(path.join(root, 'server/lib/ingest.mjs'));
+  const fresh = resolveSourceConfigs({ sources: { githubArchive: true, adzuna: false, jooble: false, greenhouseBoards: [], leverCompanies: [] } }, null);
+  ok(JSON.stringify(fresh.enabled.map((e) => e.key)) === '["github_archive"]', 'shipped defaults resolve to a real adapter', JSON.stringify(fresh.enabled.map((e) => e.key)));
+  ok(fresh.dropped.length === 0, 'a disabled toggle is not reported as a broken one');
+
+  const lists = resolveSourceConfigs({ sources: { githubArchive: false, greenhouseBoards: ['stripe'], leverCompanies: ['netflix'] } }, null);
+  ok(JSON.stringify(lists.enabled.map((e) => [e.key, e.boards || e.companies])) === '[["greenhouse",["stripe"]],["lever",["netflix"]]]', 'board lists fold into their adapter', JSON.stringify(lists.enabled));
+
+  const profile = { targets: { titleKeywords: ['staff engineer'] }, locations: ['Bengaluru'] };
+  const ui = resolveSourceConfigs({ sources: { greenhouse: { boards: ['ramp'] }, naukri: true, jooble: { apiKey: 'k' }, adzuna: {} } }, profile);
+  const byKey = Object.fromEntries(ui.enabled.map((e) => [e.key, e]));
+  ok(byKey.greenhouse.boards.join() === 'ramp' && byKey.jooble.apiKey === 'k' && byKey.naukri, 'ui-shaped config survives resolution', Object.keys(byKey).join(','));
+  ok(byKey.adzuna.what === 'staff engineer' && byKey.adzuna.where === 'Bengaluru', 'profile fills an adzuna query the user never typed');
+
+  ok(resolveSourceConfigs({ sources: { naukri: { enabled: false, query: 'x' } } }, null).enabled.length === 0, 'enabled:false inside a config object still means off');
+  const typo = resolveSourceConfigs({ sources: { linkedin: true, greenhouse: true } }, null);
+  ok(typo.enabled.map((e) => e.key).join() === 'greenhouse' && typo.dropped.join() === 'linkedin', 'an unknown toggle is named in `dropped` instead of erroring later');
+  ok(resolveSourceConfigs({ sources: {} }, null).enabled.length === 0, 'no sources is an empty answer, not an error');
+}
+
+/* Three invariants bought with three real bugs today:
+     - GET /api/jobs/fetch-status sat *after* GET /api/jobs/:id, so Express matched
+       "fetch-status" as a job id and the UI's "when did we last fetch?" read a 404
+       labelled 'job not found'.
+     - /api/meta listed enabledSources straight from the settings file, which still
+       uses camelCase keys; the UI offered to fetch `githubArchive` and the server
+       answered 'unknown source'.
+     - /api/meta hardcoded outboundNet: 'sandbox-limited' — a preview-sandbox fact
+       served to every self-hosted user. A claim about the machine has to be measured. */
+{
+  // registration order, decided on the *trimmed* line — matching an indented
+  // template against an already-trimmed string can only ever miss.
+  const atRoute = (r) => indexMjs.split('\n').findIndex((l) => l.trim() === `'${r}',`);
+  ok(atRoute('/api/jobs/fetch-status') < atRoute('/api/jobs/:id'), 'literal /api/jobs/* routes are registered before /api/jobs/:id', `fetch-status@${atRoute('/api/jobs/fetch-status')} vs :id@${atRoute('/api/jobs/:id')}`);
+  const metaBlock = indexMjs.slice(indexMjs.indexOf("  '/api/meta',"), indexMjs.indexOf("  '/api/profile',"));
+  ok(/enabledSources: resolved\.enabled\.map/.test(metaBlock), 'meta.enabledSources comes from the resolver, not raw settings keys');
+  ok(/outboundNet: net\.out \? 'open' : 'blocked'/.test(metaBlock), 'the network claim is probed, not hardcoded');
+  ok(/outboundNote: net\.note/.test(metaBlock), 'and the reason is shown, so "blocked" is actionable');
+  // code, not comments: the comment above this field *explains* the old hardcoding,
+  // and an assertion that greps for a phrase will happily find the explanation.
+  const codeOnly = indexMjs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  ok(!/sandbox-limited/.test(codeOnly), 'no sandbox-shaped assumption is baked into the API');
+  const ing = fs.readFileSync(path.join(root, 'server/lib/ingest.mjs'), 'utf8');
+  ok(/e\.message\.startsWith\(`\$\{s\.key\}:\`\)/.test(ing), 'adapter errors are not prefixed twice');
+}
+
 const atSeed = indexMjs.indexOf("'/api/jobs/seed'");
 ok(atImport > 0 && atImport < atClear && atImport < atSeed, 'import route registered before the other POST /api/jobs/* routes', `import@${atImport} clear@${atClear} seed@${atSeed}`);
 
