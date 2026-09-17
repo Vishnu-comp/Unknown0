@@ -155,9 +155,9 @@ npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine +
                     # · 119 harvester + ingest-config checks (Naukri/LinkedIn parsing,
                     #   settings→adapter resolution, how a failed fetch is reported,
                     #   route order, and that the API makes no claim it did not measure)
-                    # · 18 render probes (incl. a genuinely blank first-run profile) · 110 tailoring/intelligence/parsing/attestation checks
+                    # · 18 render probes (incl. a genuinely blank first-run profile) · 111 tailoring/intelligence/parsing/attestation checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-                    # = 403 (53+30+122+18+110+76), and `npm run test:all` adds 132 e2e = 535
+                    # = 404 (53+30+122+18+111+76), and `npm run test:all` adds 132 e2e = 536
 npm run test:e2e    # 132 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)

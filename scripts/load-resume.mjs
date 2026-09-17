@@ -178,7 +178,12 @@ console.log(`  contact         ${[parsed.contact.email, parsed.contact.phone, pa
 
 /* upload the document so the app can attach it to applications */
 const upload = await post('/api/resume', { text, applySuggestions: false });
-console.log(`\nuploaded to /api/resume → ${Math.min((upload.resume?.text || text).length, 4000)} chars stored, ${upload.resume?.storedPath ? 'file kept' : 'text only (the app keeps the extracted text, not the file)'}`);
+/* The response body is preview-capped server-side, the STORE is not: this line used to
+   print min(len, 4000) as "chars stored", which told people their resume was truncated
+   when nothing of the sort had happened. Report the store, and name the cap separately. */
+const storedChars = (upload.resume?.text || text).length;
+console.log(`\nuploaded to /api/resume → ${storedChars} chars stored, ${upload.resume?.storedPath ? 'file kept' : 'text only (the app keeps the extracted text, not the file)'}` +
+  (storedChars > 4000 ? ` · the API previews the first 4000, the store and the matcher see all of it` : ''));
 
 const saved = await put('/api/profile', profile);
 const c = saved.completeness;

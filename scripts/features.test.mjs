@@ -338,6 +338,8 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
   ok(!/city: 'Bengaluru', state: 'Karnataka'/.test(cli), 'the CLI does not invent an address when the resume has none');
   ok(/noticePeriodDays: args\.notice \? Number\(args\.notice\) : null/.test(cli), 'the CLI leaves notice unset unless --notice was passed');
   ok(/minSalary: args\.floor \? Number\(String\(args\.floor\)/.test(cli), 'the salary floor still only comes from --floor');
+  ok(!/Math\.min\([^)]*4000\)/.test(cli),
+    'the CLI reports what the store holds, not the API preview cap — resume.text is never truncated on save');
 }
 
 /* What DEFAULT_PROFILE and the answer builder used to assert about a stranger.
