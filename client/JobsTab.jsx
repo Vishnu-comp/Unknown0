@@ -1,6 +1,21 @@
 import { useMemo, useState } from 'react';
 import { api, toast, copy } from './api.js';
-import { Panel, Ring, Chips, Spinner, Modal, fmtMoney, timeAgo, Bar, Tabs } from './ui.jsx';
+import { Panel, Ring, Chips, Spinner, Modal, fmtMoney, timeAgo, postedAgo, Bar, Tabs } from './ui.jsx';
+
+/**
+ * One pay line for the card and the modal, from whichever fields exist.
+ * Cases it has to survive: a normal range, only one end published, min === max
+ * (never render "₹12L–₹12L"), pay stated in words the parser refused, and
+ * nothing at all.
+ */
+function payLine(job, { withCaveat = false } = {}) {
+  const lo = fmtMoney(job.salaryMin ?? job.salaryMax, job.salaryCurrency);
+  const hi = fmtMoney(job.salaryMax, job.salaryCurrency);
+  if (lo && hi && job.salaryMin && job.salaryMax && job.salaryMax !== job.salaryMin) return `${lo}–${hi}`;
+  if (lo) return lo;
+  if (job.salaryText) return withCaveat ? `${job.salaryText} (as written — not parsed into a number)` : job.salaryText;
+  return null;
+}
 
 export function JobsTab({ jobs, meta, refresh, busy, setBusy, profile }) {
   const [q, setQ] = useState('');
@@ -118,7 +133,7 @@ export function JobsTab({ jobs, meta, refresh, busy, setBusy, profile }) {
         {list.length === 0 && (
           <div className="empty">
             <b>{jobs.length ? 'nothing matches those filters' : 'no jobs in the store yet'}</b>
-            {jobs.length ? 'lower the min score or clear the search.' : 'click “+ demo corpus” to load 16 realistic postings, or enable a source in Settings.'}
+            {jobs.length ? 'lower the min score or clear the search.' : 'click “+ demo corpus” to load 16 realistic postings, fetch a real source, or use the extension’s Harvest tab to read the LinkedIn/Naukri results page you already have open — Settings → Import takes pasted JSON from anything else.'}
           </div>
         )}
         {list.map((j) => (
@@ -137,13 +152,21 @@ export function JobsTab({ jobs, meta, refresh, busy, setBusy, profile }) {
                     api-apply
                   </span>
                 )}
+                {j.company === 'Company withheld' && j.url && (
+                  <span className="chip flag" title="this row came from the markup path, where a company name could only be guessed from the URL slug — so it was left out rather than invented. open the posting to fill it in">
+                    needs a click
+                  </span>
+                )}
                 {(j.match.flags || []).some((f) => /unpaid|volunteer/i.test(f)) && <span className="chip miss">unpaid</span>}
               </div>
               <div className="job-meta">
                 <b style={{ color: 'var(--text)' }}>{j.company}</b>
                 <span>📍 {j.location || '—'}{j.remote ? ' · remote' : ''}</span>
-                {j.salaryMin && <span>💰 {fmtMoney(j.salaryMin, j.salaryCurrency)}{j.salaryMax ? `–${fmtMoney(j.salaryMax, j.salaryCurrency)}` : ''}</span>}
-                <span>🗓 {j.postedAt ? timeAgo(j.postedAt + 'T00:00:00Z') : 'n/a'}</span>
+                {/* shown when a number OR just words exist: a card claiming nothing
+                    about pay while the posting says "₹18 LPA" teaches you to distrust
+                    every other number on it */}
+                {payLine(j) && <span title={j.salaryMin || j.salaryMax ? undefined : 'stated on the posting, but not in a shape the parser trusts'}>💰 {payLine(j)}</span>}
+                <span>🗓 {postedAgo(j.postedAt)}</span>
                 <span className="chip src">{j.source}</span>
               </div>
               <div className="job-bits">
@@ -397,10 +420,13 @@ export function JobModal({ job, onClose, onDraft, busy, initialTab, initialIntel
             <h4 className="sec">posting</h4>
             <div className="kv">
               <div>source</div><div>{job.source}</div>
-              <div>posted</div><div>{job.postedAt || '—'}</div>
+              <div>posted</div><div>{job.postedAt ? `${postedAgo(job.postedAt)} · ${String(job.postedAt).slice(0, 10)}` : '—'}</div>
               <div>contract</div><div>{job.contractType || '—'}</div>
               <div>category</div><div>{job.category || '—'}</div>
-              <div>salary</div><div>{job.salaryMin ? `${fmtMoney(job.salaryMin, job.salaryCurrency)}–${fmtMoney(job.salaryMax, job.salaryCurrency)}` : 'not stated'}</div>
+              <div>salary</div>
+              <div>{payLine(job, { withCaveat: true }) || 'not stated'}</div>
+              {job.experienceText && <div>experience</div>}
+              {job.experienceText && <div>{job.experienceText}</div>}
             </div>
             <h4 className="sec">tags</h4>
             <Chips items={(job.tags || []).slice(0, 14)} />

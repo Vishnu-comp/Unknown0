@@ -121,7 +121,7 @@ with zero configuration and no network. Worked path:
 
 ```bash
 npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
-                    # · 82 harvester checks (Naukri/LinkedIn parsing) · 14 render probes
+                    # · 82 harvester checks (Naukri/LinkedIn parsing) · 15 render probes
                     # · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
 npm run test:e2e    # 129 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
