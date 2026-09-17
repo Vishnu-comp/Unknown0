@@ -237,7 +237,7 @@ because it assumes your laptop or a private box.
 Handy endpoints once it's up (`curl` works, there's no auth to script around):
 
 ```bash
-curl localhost:3000/healthz                       # ok + uptime + which dataDir
+curl localhost:3000/healthz                       # ok + process uptime + pid + node + which dataDir
 curl localhost:3000/api/meta                      # fields, sources, pipeline, which keys are set
 curl "localhost:3000/api/jobs?sort=score"         # ranked, with match + flags
 curl localhost:3000/api/profile                   # + completeness %

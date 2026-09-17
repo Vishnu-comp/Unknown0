@@ -782,7 +782,12 @@ function slug(s = '') {
 
 /* ----------------------------------- ui ----------------------------------- */
 
-app.get('/healthz', (req, res) => res.json({ ok: true, uptime: os.uptime(), dataDir: DATA_DIR }));
+/* Healthcheck. `uptime` is the PROCESS's, not `os.uptime()` — the host's boot age,
+   which is exactly the number that tells you nothing when you are asking "did the
+   server I just restarted come back, or am I looking at a stale one on this port?".
+   pid + node follow for the same reason: in a dev sandbox two servers can end up on
+   :3000, and "which one am I talking to" should be answerable without ps. */
+app.get('/healthz', (req, res) => res.json({ ok: true, uptime: Math.round(process.uptime()), pid: process.pid, node: process.version, dataDir: DATA_DIR }));
 app.use(express.static(path.join(ROOT, 'public'), { maxAge: 0 }));
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: `no route: ${req.method} ${req.path}` });
