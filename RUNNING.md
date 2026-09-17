@@ -108,8 +108,9 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 5 suites, ~5 seconds, no network
-npm run test:e2e       # 118 checks; boots its own server on a random port :3210-3299
+npm test               # 6 suites, ~6 seconds, no network
+npm run test:harvest   # harvester alone (jsdom fixtures for the LinkedIn/Naukri scrapers)
+npm run test:e2e       # 129 checks; boots its own server on a random port :3210-3299
 npm run test:all       # both
 ```
 
@@ -119,10 +120,13 @@ npm run test:all       # both
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 14 | every tab in every state renders without throwing |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:harvest` — `scripts/harvest.test.mjs` | 82 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
-| `test:e2e` — `scripts/e2e.mjs` | 118 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → tailoring → intelligence → submit → exports |
+| `test:e2e` — `scripts/e2e.mjs` | 129 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**248 checks, plus 14 render probes = 262, plus 118 end-to-end.** Current tree: all green.
+**250 + 82 harvester + 14 render = 344 checks, plus 129 end-to-end.** Current tree: all green
+(run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
+the version guard keep Node 18.0 supported — see §0).
 
 Useful variants:
 
@@ -159,8 +163,18 @@ needs no host permission for your ApplyFlow server and works when the API is
 bound to localhost only. It types into the form; **you** press Submit. Safety
 rules and the per-board behaviour are in [`extension/README.md`](extension/README.md).
 
+**To get real postings in** (step 3' — no pack needed): open a LinkedIn search
+results page or a Naukri search page, then extension icon → **Harvest** → set the
+server address → *read only (no import)* → *read cards here → import*. It posts to
+the same `POST /api/jobs/import` the Settings → Import box uses. If you reload
+`server/lib/harvest.mjs`, re-run `npm run build` and reload the extension, or the
+page-side copy goes stale.
+
 Firefox: `about:debugging#/runtime/this-firefox` → Load Temporary Add-on →
-pick `extension/manifest.json`.
+pick `extension/manifest.json`. The extension's fill and harvest paths both
+`import()` their `lib/*.mjs` at runtime; if that ever fails on a given browser,
+`content.js` falls back to its built-in field map for filling and reports a clear
+error for harvest — in which case use the paste path in Settings → Import.
 
 ---
 
@@ -179,6 +193,21 @@ or put them in **Settings → Sources** (stored in `data/settings.json`).
 Greenhouse/Lever board slugs need no key at all: `greenhouseBoards: ["zerodha","cred"]`,
 `leverCompanies: ["postman"]`. Auto-refresh from Settings → **run auto-apply**;
 cron the same way with `POST /api/run` if you'd rather not keep the UI open.
+
+**Naukri is different from those five, and deliberately so.** It has no public API:
+what exists is the search endpoint the site itself calls, plus server-rendered HTML,
+both behind an anti-bot challenge. The `naukri` source tries the endpoint, then the
+HTML, and if neither yields rows it raises an error that *names* the fallback path
+rather than returning an empty list. Do not expect it to work from a datacenter IP.
+
+**LinkedIn has no server-side path at all, by decision.** Its Jobs API is partner
+OAuth, and scraping the site from a server violates the ToS of the one account you
+least want to lose. The only supported route is the extension reading a page you
+already have open in your own session, or pasting JSON into Settings → Import.
+Both land in the same normaliser, so scoring, letters, tailoring and prefill behave
+identically for imported rows — verified by `test:harvest` and the e2e import
+section (an imported job gets a score, a stable dedupe id, and a salary parsed at
+the right scale).
 
 A source that can't connect fails with its own error text in the UI — never an
 empty list dressed up as "no matches".

@@ -21,7 +21,7 @@ import {
 } from './lib/db.mjs';
 import { scoreJob } from './lib/match.mjs';
 import { extractText, parseResume, suggestProfilePatch } from './lib/resume.mjs';
-import { SOURCES, fetchAll } from './lib/ingest.mjs';
+import { SOURCES, fetchAll, normalizeImport } from './lib/ingest.mjs';
 import { composeApplication, runAutoApply, transition, PIPELINE, countsToday, inferQuestions } from './lib/automation.mjs';
 import demoJobs from './data/demoJobs.mjs';
 import { tailorResume, toAtsPlain } from './lib/tailor.mjs';
@@ -62,6 +62,7 @@ const ROUTES = `ApplyFlow API
   GET  /api/jobs/:id/research         posting intelligence + insight-adjusted score
   GET  /api/jobs/:id/tailored         resume re-ordered for this posting (?format=txt = download)
   POST /api/jobs/fetch {sources:[]}   pull from enabled adapters
+  POST /api/jobs/import {jobs:[]}     paste / extension harvest → same normalised shape
   POST /api/jobs/seed | /api/jobs/clear | /api/jobs/recompute
   POST /api/apps/draft {jobIds:[]}    compose letter + answers + prefill pack
   GET  /api/apps | PATCH /api/apps/:id | POST /api/apps/:id/status | DELETE /api/apps/:id
@@ -256,6 +257,44 @@ app.get(
 app.post(
   '/api/jobs/recompute',
   handle((req, res) => json(res, { jobs: recomputeAll(getProfile()).length }))
+);
+
+/**
+ * Import jobs from anywhere we cannot (or should not) fetch: LinkedIn, a careers
+ * page, a JSON paste, a file. This is the honest answer to "real Naukri/LinkedIn
+ * jobs" in a self-hosted app — both sites block unattended reads, and LinkedIn's
+ * only official jobs API is partner OAuth. Reading the page you already have open
+ * (the extension does this) or pasting its JSON gives the same normalized shape,
+ * so scoring, letters, tailoring and prefill work with no special-casing.
+ */
+app.post(
+  '/api/jobs/import',
+  handle(async (req, res) => {
+    const raw = req.body?.jobs ?? req.body;
+    /* `{}` must not fall through to the generic "no usable rows" message: the fix
+       for an empty POST is a different thing than the fix for a malformed row, and
+       the one message the caller actually reads should name the shape. */
+    if (!raw || (typeof raw === 'object' && !Array.isArray(raw) && !Object.keys(raw).length)) {
+      throw bad('Empty body. Send { "jobs": [...] } — a LinkedIn/Naukri-style array, a raw search response, or our own export format.');
+    }
+    const sourceHint = String(req.body?.source || 'imported').slice(0, 40);
+    const list = await normalizeImport(raw, sourceHint);
+    if (!list.length) throw bad('No usable rows found. Each job needs at least a title and a url.');
+    const profile = getProfile();
+    const jobs = mergeJobs(list, getJobs());
+    saveJobs(jobs.map((j) => ({ ...j, matchedAt: new Date().toISOString() })));
+    const scored = recomputeAll(profile);
+    const bySource = {};
+    for (const j of scored) bySource[j.source] = (bySource[j.source] || 0) + 1;
+    const skipped = (Array.isArray(raw) ? raw.length : (raw?.jobs?.length ?? 0)) - list.length;
+    json(res, {
+      imported: list.length,
+      skipped: Math.max(0, skipped),
+      total: scored.length,
+      bySource,
+      note: skipped > 0 ? `${skipped} row(s) had no title or url and were dropped — never guessed` : undefined,
+    });
+  })
 );
 
 app.post(

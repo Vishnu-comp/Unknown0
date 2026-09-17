@@ -38,11 +38,40 @@ const SOURCE_GUIDE = {
     help: 'Same idea for Lever customers: api.lever.co/v0/postings/{org}?mode=json. Add org slugs.',
     fields: [{ k: 'companies', label: 'org slugs (one per line)', type: 'list', placeholder: 'netflix\npalantir\nplaid' }],
   },
+  naukri: {
+    help:
+      'No public API exists — this calls Naukri’s own undocumented search endpoint, then falls back to reading their server-rendered HTML. It works until they change it or challenge the request, so treat it as best-effort and use the extension (or Import below) as the reliable path. Expect "blocked by anti-bot" if your network is datacenter-IP’d.',
+    fields: [
+      { k: 'keyword', label: 'keyword', placeholder: 'java backend engineer' },
+      { k: 'location', label: 'location', placeholder: 'Bengaluru' },
+      { k: 'pages', label: 'pages (1-5)', type: 'number', placeholder: '2' },
+      { k: 'experience', label: 'experience (yrs)', type: 'number', placeholder: '3' },
+      { k: 'freshness', label: 'last N days', type: 'number', placeholder: '7' },
+      { k: 'workMode', label: 'work mode', placeholder: 'WFO | WFH | Hybrid' },
+    ],
+  },
 };
+
+/* Shown inside the Import box so a first attempt is a copy-paste, not a guess at
+   the schema. Kept parseable on purpose — it is also the fixture for the note in
+   server/lib/harvest.mjs about what a row needs. */
+const IMPORT_SAMPLE = `[
+  {
+    "title": "Senior Backend Engineer",
+    "companyName": "Zerodha",
+    "location": "Bengaluru",
+    "url": "https://www.linkedin.com/jobs/view/4123456789/",
+    "salary": "₹30 - ₹45 Lakhs p.a.",
+    "experience": "3-6 Yrs",
+    "skills": ["Java", "Spring Boot", "Kafka"]
+  }
+]`;
 
 export function SettingsTab({ settings, setSettings, meta, refresh, busy, setBusy }) {
   const [draft, setDraft] = useState(settings || { sources: {}, autoApply: {}, llm: {} });
   const [testing, setTesting] = useState(null);
+  const [importText, setImportText] = useState('');
+  const [importStatus, setImportStatus] = useState(null);
 
   useEffect(() => setDraft(settings || { sources: {}, autoApply: {}, llm: {} }), [JSON.stringify(settings)]);
 
@@ -85,6 +114,34 @@ export function SettingsTab({ settings, setSettings, meta, refresh, busy, setBus
       toast(e.message, 'err', 10000);
     }
     setTesting(null);
+  }
+
+  /* Import never touches the network: the paste already happened. The server does
+     the normalising (see server/lib/harvest.mjs) so scores, letters, tailoring and
+     the prefill pack work on imported rows exactly as they do on fetched ones. */
+  async function runImport() {
+    let parsed;
+    try {
+      parsed = JSON.parse(importText);
+    } catch (e) {
+      setImportStatus({ kind: 'bad', text: `not valid JSON: ${e.message}` });
+      return;
+    }
+    setBusy(true);
+    setImportStatus({ kind: 'busy', text: 'normalising…' });
+    try {
+      const r = await api.importJobs(parsed);
+      setImportStatus({
+        kind: 'good',
+        text: `${r.imported} imported${r.skipped ? `, ${r.skipped} skipped (rows need a title and a url)` : ''} · corpus now ${r.total}${r.bySource ? ` · ${Object.entries(r.bySource).map(([k, v]) => `${k}:${v}`).join(' ')}` : ''}`,
+      });
+      setImportText('');
+      refresh();
+    } catch (e) {
+      setImportStatus({ kind: 'bad', text: e.message || 'import failed' });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -149,6 +206,37 @@ export function SettingsTab({ settings, setSettings, meta, refresh, busy, setBus
           trade-off in this whole space — one leak and your LinkedIn (your actual professional identity) is gone. ApplyFlow keeps the submit click on your
           side, in your own browser, and automates everything up to that point. If you later want to accept that risk for yourself, the seam to add it is
           <span className="mono"> server/lib/automation.mjs → composeApplication()</span>, plus a Playwright worker — not a server-side password vault.
+        </div>
+      </Panel>
+
+      <Panel title="Import jobs (paste JSON, or push from the extension)" sub="one normaliser for every path — pasted JSON, the extension's push and the source fetchers all land on the same shape">
+        <div className="panel-body">
+          <div className="dim small">
+            Neither LinkedIn nor Naukri has a public jobs API: LinkedIn's Jobs API is partner-OAuth only, and Naukri's is an internal endpoint behind an
+            active anti-bot challenge. So the reliable route is to read the page <b>you already have open</b> — the Chrome extension harvests the cards in
+            your own session and pushes them here. Nothing is clicked, no cookies are read, and the last click stays yours.
+          </div>
+          <div className="mt12">
+            <textarea rows={8} className="mono" style={{ width: '100%', fontSize: 12 }} placeholder={IMPORT_SAMPLE} value={importText} onChange={(e) => setImportText(e.target.value)} />
+          </div>
+          <div className="flexr mt8" style={{ gap: 8 }}>
+            <button className="btn sm" disabled={busy || !importText.trim()} onClick={runImport}>
+              {busy ? 'importing…' : 'import'}
+            </button>
+            <button className="btn sm" disabled={!importText.trim()} onClick={() => setImportText(IMPORT_SAMPLE)}>
+              use sample
+            </button>
+            <span style={{ flex: 1 }} />
+            {importStatus && <span className={`chip ${importStatus.kind === 'good' ? 'good' : importStatus.kind === 'bad' ? 'bad' : ''}`}>{importStatus.text}</span>}
+          </div>
+          <div className="note info mt12">
+            <h5>What a row may look like</h5>
+            A bare array, an object with <span className="mono">jobs: […]</span>, or a raw Naukri search response are all accepted — field names are mapped for you
+            (<span className="mono">jobTitle / title / name</span>, <span className="mono">companyName / company</span>, <span className="mono">salary / ctc / salaryText</span>,
+            <span className="mono"> experience / yoe</span>, <span className="mono">skills / keySkills</span>, <span className="mono">serpActionUrl / jobUrl / link</span>).
+            A row only needs a <b>title</b> and a <b>url</b>; anything else is counted as skipped rather than guessed, and unknown values stay null instead of
+            being invented — because a salary that looks real but isn't ends up typed into an actual form.
+          </div>
         </div>
       </Panel>
 

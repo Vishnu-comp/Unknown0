@@ -22,7 +22,7 @@ fs.mkdirSync(outdir, { recursive: true });
 
 /* keep the extension's copy of the shared mapper in lockstep with server/lib */
 fs.mkdirSync(path.join(ROOT, 'extension', 'lib'), { recursive: true });
-for (const f of ['fieldmap.mjs', 'fill.mjs']) {
+for (const f of ['fieldmap.mjs', 'fill.mjs', 'harvest.mjs']) {
   fs.copyFileSync(path.join(ROOT, 'server', 'lib', f), path.join(ROOT, 'extension', 'lib', f));
 }
 

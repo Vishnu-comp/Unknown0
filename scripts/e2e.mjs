@@ -277,7 +277,40 @@ const sweAgain = r1.data.jobs.find((x) => x.id === swe.id);
 check('scoring is deterministic for identical input', sweRescored.match.score === sweAgain.match.score, `swe ${sweRescored.match.score} = ${sweAgain.match.score}`);
 await j('/api/profile', { method: 'PUT', body: JSON.stringify(p0.data.profile) });
 
-console.log('\n8. error handling & UI');
+console.log('\n8. import route (the one funnel for paste + extension harvest)');
+const beforeImport = (await j('/api/jobs')).data.count;
+const liRow = {
+  jobs: [
+    { title: 'Senior Backend Engineer', companyName: 'Zerodha', location: 'Bengaluru, Karnataka, India', url: 'https://www.linkedin.com/jobs/view/4123456789/?trk=search', salary: '₹30 - ₹45 Lakhs p.a.', experience: '4-7 Yrs', skills: ['Java', 'Spring Boot', 'Kafka'] },
+    { title: 'Staff SRE', company: 'Wise', location: 'Remote', url: 'https://www.linkedin.com/jobs/view/9876543210/' },
+  ],
+  source: 'linkedin',
+};
+const imp = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify(liRow) });
+check('POST /api/jobs/import accepts a {jobs:[…]} envelope', imp.status === 200 && imp.data.imported === 2, JSON.stringify(imp.data).slice(0, 110));
+check('imported rows land in the same store as fetched ones', (await j('/api/jobs')).data.count >= beforeImport + 2, `${beforeImport} → ${(await j('/api/jobs')).data.count}`);
+check('source is recorded, so provenance survives', imp.data.bySource?.linkedin >= 2, JSON.stringify(imp.data.bySource));
+const afterFirst = (await j('/api/jobs')).data.count;
+const again = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify(liRow) });
+check('re-importing the same cards dedupes by url/id instead of duplicating', again.status === 200 && (await j('/api/jobs')).data.count === afterFirst, `${afterFirst} → ${(await j('/api/jobs')).data.count}`);
+const listed = await j('/api/jobs?q=Zerodha');
+const importedJob = listed.data.jobs.find((x) => /linkedin\.com\/jobs\/view\/4123456789/.test(x.url || ''));
+check('an imported job is scored like any other', !!importedJob && Number.isFinite(importedJob.match?.score), importedJob ? `score ${importedJob.match.score} (${importedJob.match.grade})` : 'not found');
+check('salary from an Indian range is scaled, not read as lakhs-of-nothing', importedJob?.salaryMin === 3000000 && importedJob?.salaryMax === 4500000, `${importedJob?.salaryMin}-${importedJob?.salaryMax}`);
+check('the tracking query string is stripped so the id is stable', importedJob?.url === 'https://www.linkedin.com/jobs/view/4123456789', String(importedJob?.url));
+const naukriShape = await j('/api/jobs/import', {
+  method: 'POST',
+  body: JSON.stringify({ source: 'naukri', data: { jobDetails: [{ jobId: 555000111, title: 'Java Backend Engineer', companyName: 'Dynpro Technologies', location: 'Bengaluru', salary: '12-18 LPA', experience: '2-5 Yrs', skills: ['Java', 'MySQL'], serpActionUrl: '/job-listings-java-backend-engineer-dynpro-bengaluru-555000111?src=SearchResult' }] } }),
+});
+check('a raw Naukri search response is accepted as-is', naukriShape.status === 200 && naukriShape.data.imported === 1, JSON.stringify(naukriShape.data).slice(0, 90));
+const nk = (await j('/api/jobs?q=Dynpro')).data.jobs.find((x) => /555000111/.test(x.url || ''));
+check('Naukri url + salary normalised through the same path', nk?.salaryMin === 1200000 && /naukri\.com\/job-listings-/.test(nk?.url || ''), `${nk?.salaryMin}-${nk?.salaryMax}`);
+const junk = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify({ jobs: [{ location: 'Bengaluru' }, { foo: 1 }] }) });
+check('rows with no title/url are refused, not half-imported', junk.status === 400, (junk.data.error || '').slice(0, 80));
+const empty = await j('/api/jobs/import', { method: 'POST', body: JSON.stringify({}) });
+check('an empty body is refused with a shape hint', empty.status === 400 && /jobs/.test(empty.data.error || ''), (empty.data.error || '').slice(0, 70));
+
+console.log('\n9. error handling & UI');
 const noSource = await j('/api/jobs/fetch', { method: 'POST', body: JSON.stringify({ sources: ['adzuna'] }) });
 check('bad/absent credentials fail loudly with a message', noSource.status === 400 && /Nothing came back|Errors/.test(noSource.data.error || ''), (noSource.data.error || '').slice(0, 90));
 const missing = await j('/api/jobs/does-not-exist');
@@ -304,7 +337,7 @@ check('css served', styles.status === 200 && cssBytes > 1000, `${(cssBytes / 102
 const health = await j('/healthz');
 check('healthcheck', health.data.ok === true);
 
-console.log('\n9. filter/search API');
+console.log('\n10. filter/search API');
 const filtered = await j('/api/jobs?min=70&sort=score');
 check('min-score filter', filtered.data.jobs.every((x) => x.match.score >= 70), `${filtered.data.count} ≥70`);
 const searched = await j('/api/jobs?q=kubernetes');
@@ -312,7 +345,7 @@ check('text search', searched.data.count >= 0 && searched.data.jobs.every((x) =>
 const statusNew = await j('/api/jobs?status=new');
 check('status=new excludes drafted jobs', statusNew.data.jobs.every((x) => !x.app), `${statusNew.data.count} open`);
 
-console.log('\n10. resume tailoring (no fabrication) + posting intelligence');
+console.log('\n11. resume tailoring (no fabrication) + posting intelligence');
 const jobsAll = (await j('/api/jobs')).data.jobs;
 const ghJob = jobsAll.find((x) => /greenhouse\.io/i.test(x.url || '')) || jobsAll[0];
 const otherJob = jobsAll.find((x) => x.id !== ghJob.id && x.match.score > 30);
@@ -354,7 +387,7 @@ const weak = jobsAll.filter((x) => x.match.score < 25);
   check('a weak posting is not flattered into "good"', rw.every((r) => r.data.research.insights.length === 0 || r.data.research.verdict !== 'good' || r.data.research.positives.length > 0), rw.map((r) => r.data.research.verdict).join(','));
 }
 
-console.log('\n11. direct ATS submit (against a local mock of the public API)');
+console.log('\n12. direct ATS submit (against a local mock of the public API)');
 const draftJob = await j('/api/apps/draft', { method: 'POST', body: JSON.stringify({ jobIds: [ghJob.id], force: true }) });
 const appsNow = (await j('/api/apps')).data.apps;
 const ghApp = appsNow.find((a) => a.jobId === ghJob.id);

@@ -130,6 +130,7 @@ for (const [name, el] of Object.entries(cases)) {
       JobModalIntelTrim: ['job intel'],
       JobsTab: ['api-apply'],
       SettingsTabSubmitOn: ['Direct ATS submit', 'what it will never do'],
+      SettingsTab: ['Import jobs', 'has a public jobs API', 'partner-OAuth', 'use sample'],
     }[name];
     for (const m of markers || []) if (!html.includes(m)) throw new Error(`missing "${m}" in render`);
     if (name === 'JobModalIntel' && !/read the posting|loading/.test(html)) {
