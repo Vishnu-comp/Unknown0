@@ -121,7 +121,7 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 402 checks, ~6 seconds
+npm test               # 6 suites, 403 checks, ~6 seconds
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
 npm run test:e2e       # 132 checks; boots its own server on a random port :3210-3299
@@ -138,7 +138,7 @@ npm run test:all       # both
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 132 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 121 + 18 + 110 + 76 = 402 checks, plus 132 end-to-end = 534.** Current tree: all green
+**53 + 30 + 122 + 18 + 110 + 76 = 403 checks, plus 132 end-to-end = 535.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -204,9 +204,40 @@ export LLM_API_KEY=…        # optional, enables letter polish only
 ```
 
 or put them in **Settings → Sources** (stored in `data/settings.json`).
-Greenhouse/Lever board slugs need no key at all: `greenhouseBoards: ["zerodha","cred"]`,
-`leverCompanies: ["postman"]`. Auto-refresh from Settings → **run auto-apply**;
-cron the same way with `POST /api/run` if you'd rather not keep the UI open.
+
+### Greenhouse, in detail (no key needed)
+
+Greenhouse and Lever are the only sources that cost nothing to enable: each customer
+company exposes its whole board as open JSON. In the UI — **Settings → Job sources →
+Greenhouse ATS boards** — flip the toggle on, paste board slugs one per line, **save
+settings**, then press the per-source *test fetch*. In `data/settings.json` that is
+`sources.greenhouse.boards`; the flat legacy key `greenhouseBoards: ["zerodha","cred"]`
+still folds into it, so an old file keeps working.
+
+A slug is the path segment of the careers URL —
+`job-boards.greenhouse.io/**stripe**` → `stripe`. Only the first 12 slugs are read, and
+a typo'd or shut board is skipped by name while the rest still fetch. The list call asks
+for `?content=true`, which is what puts real description text (salary lines, "X+ years",
+sponsorship wording) into the posting-intelligence parsers instead of a stub.
+
+To verify without the UI, and to see exactly what the server will do:
+
+```bash
+curl -s -X PUT localhost:3000/api/settings -H 'content-type: application/json' \
+     -d '{"sources":{"greenhouse":{"boards":["stripe","datadog"]}}}'
+curl -s localhost:3000/api/meta | jq '.enabledSources'      # → ["github_archive","greenhouse"]
+curl -s -X POST localhost:3000/api/jobs/fetch -d '{}' -H 'content-type: application/json' | jq
+```
+
+Two failure modes are deliberately loud: no slugs at all →
+`greenhouse: no board slugs configured … Nothing was fabricated`; blocked egress →
+`2 of 2 board(s) unreachable → stripe: boards-api.greenhouse.io → unreachable from this
+machine (ECONNRESET)`, because a blocked network must never be reported as "this source
+has no jobs". One UI quirk worth knowing: toggling a source **off** drops its config, so
+the textarea hides with your slugs in it — re-enable and paste them again.
+
+Auto-refresh from Settings → **run auto-apply**; cron the same way with `POST /api/run`
+if you'd rather not keep the UI open.
 
 **Naukri is different from those five, and deliberately so.** It has no public API:
 what exists is the search endpoint the site itself calls, plus server-rendered HTML,

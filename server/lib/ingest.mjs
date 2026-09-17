@@ -227,7 +227,11 @@ async function greenhouse(cfg) {
   const skipped = [];
   for (const slug of boards.slice(0, 12)) {
     try {
-      const data = await getJson(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`);
+      /* content=true: without it the board list returns stub content ("A description of
+         the job is not available"), and the posting intelligence — salary text, years of
+         experience, sponsorship lines — has nothing to read. The descriptions arrive as
+         HTML and are stripped one line down, so this costs parsing, not accuracy. */
+      const data = await getJson(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`);
       for (const j of data.jobs || []) {
         const sal = (j.offices || [])[0]?.name || '';
         out.push(

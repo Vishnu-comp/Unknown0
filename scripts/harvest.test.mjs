@@ -262,7 +262,9 @@ const atClear = indexMjs.indexOf("'/api/jobs/clear'");
 ok(/CERT\|SSL\|TLS\|UNABLE_TO_/.test(ingestMjs), 'networkHint recognises TLS-interception codes, not just ECONN*');
 ok(!/greenhouse: \$\{failed\.length\}/.test(ingestMjs), 'greenhouse distinguishes unreachable boards from empty ones');
 ok(/no board slugs configured/.test(ingestMjs) && /no org slugs configured/.test(ingestMjs), 'ATS adapters say "not configured" instead of returning nothing');
-{
+
+ok(/boards\/\$\{slug\}\/jobs\?content=true/.test(ingestMjs),
+  'the Greenhouse list call asks for content=true, so salary/experience/sponsorship text exists to parse');{
   const { SOURCES } = await import(path.join(root, 'server/lib/ingest.mjs'));
   const thrown = await SOURCES.greenhouse.run({}).then(() => null, (e) => e.message);
   ok(/no board slugs configured/.test(thrown || ''), 'unconfigured greenhouse throws rather than reporting 0 jobs', String(thrown).slice(0, 60));
