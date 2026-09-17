@@ -89,6 +89,13 @@ try {
 }
 const parsed = parseResume(text);
 
+if (args.dump) {
+  fs.mkdirSync(path.dirname(path.resolve(expandHome(args.dump))), { recursive: true });
+  fs.writeFileSync(expandHome(args.dump), text);
+  console.log(`  extracted text → ${expandHome(args.dump)} (${text.length} chars) — nothing else was written, no upload sent`);
+  if (args.dump === 'stdout') process.exit(0);
+}
+
 if (!parsed.name) console.log('· note: no name line detected — set fullName on the Profile tab');
 
 /* Start from what the parser can defend, then add only what it cannot know. */
@@ -160,14 +167,19 @@ const get = async (url) => {
 
 console.log(`\nresume: ${RESUME}  (${parsed.words} words, ${ext})`);
 console.log(`  roles found     ${parsed.experience.length}`);
-console.log(`  bullets kept    ${parsed.experience.map((e) => `${e.company}:${e.bullets.length}`).join('  ') || '—'}`);
+/* ":8" on its own means the parser could not name the employer — say so, rather
+   than printing a colon and letting someone read it as a formatting glitch. */
+console.log(
+  `  bullets kept    ${parsed.experience.map((e) => `${e.company || '(no company line found)'}:${e.bullets.length}`).join('  ') || '—'}`
+);
+if (parsed.experience.some((e) => !e.company)) console.log('                    ↑ check the EXPERIENCE headers in your PDF text: --dump=/tmp/resume.txt writes what we read');
 console.log(`  education       ${parsed.education.length}`);
 console.log(`  skills          ${parsed.skills.length}  · quantified wins: ${parsed.wins.length}`);
 console.log(`  contact         ${[parsed.contact.email, parsed.contact.phone, parsed.contact.linkedin, parsed.contact.github].filter(Boolean).join(' · ')}`);
 
 /* upload the document so the app can attach it to applications */
 const upload = await post('/api/resume', { text, applySuggestions: false });
-console.log(`\nuploaded to /api/resume → ${((upload.resume?.text || text).length) | 0} chars stored, ${upload.resume?.storedPath ? 'file kept' : 'text only'}`);
+console.log(`\nuploaded to /api/resume → ${Math.min((upload.resume?.text || text).length, 4000)} chars stored, ${upload.resume?.storedPath ? 'file kept' : 'text only (the app keeps the extracted text, not the file)'}`);
 
 const saved = await put('/api/profile', profile);
 const c = saved.completeness;

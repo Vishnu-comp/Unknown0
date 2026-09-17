@@ -124,6 +124,22 @@ console.log('\n2b. real file uploads (PDF + DOCX via multipart)');
   check('PDF → role/company/dates correct', (pdf.data.resume?.summary?.experience || [])[0]?.company === 'Nimbus Labs' && (pdf.data.resume?.summary?.experience || [])[0]?.start === '2023-03');
   check('PDF → skill mining works', (pdf.data.resume?.summary?.skills || []).length >= 15, `${pdf.data.resume?.summary?.skills?.length} skills`);
 
+  {
+    const { extractText, parseResume, stripMarkdownLinks } = await import(new URL('../server/lib/resume.mjs', import.meta.url).href);
+    const raw = await extractText(fs.readFileSync(new URL('sample-resume.pdf', dir)), 'application/pdf', 'sample-resume.pdf');
+    const txt = fs.readFileSync(new URL('sample-resume.txt', dir), 'utf8');
+    check('PDF keeps resume typography (em dash, bullets) so it exercises the same parser path as a real file', /—/.test(raw) && /•/.test(raw), `${(raw.match(/—/g) || []).length} em dashes, ${(raw.match(/•/g) || []).length} bullets`);
+    const fromPdf = parseResume(raw);
+    const fromTxt = parseResume(txt);
+    const txtBullets = JSON.stringify(parseResume(fs.readFileSync(new URL('sample-resume.txt', dir), 'utf8')).experience.map((e) => e.bullets.length));
+    check('PDF → bullet counts match the .txt it was generated from', JSON.stringify((pdf.data.resume?.summary?.experience || []).map((e) => e.bullets.length)) === txtBullets, `${JSON.stringify((pdf.data.resume?.summary?.experience || []).map((e) => `${e.company}:${e.bullets.length}`))}`);
+    check('PDF and TXT agree on companies, titles and education', JSON.stringify(fromPdf.experience.map((e) => [e.company, e.title.split(' -> ')[0].split(' → ')[0]])) === JSON.stringify(fromTxt.experience.map((e) => [e.company, e.title.split(' -> ')[0].split(' → ')[0]])), fromPdf.experience.map((e) => e.company).join('+'));
+    check('PDF and TXT agree on skill + education counts', fromPdf.skills.length === fromTxt.skills.length && fromPdf.education.length === fromTxt.education.length, `${fromPdf.skills.length}/${fromTxt.skills.length} skills`);
+    const md = parseResume('A Person\n[a@b.com](mailto:a@b.com) | [linkedin.com/in/some-one](https://linkedin.com/in/some-one)\n\nEXPERIENCE\n[Acme Corp](https://acme.example) — Software Engineer, Bengaluru | Jan 2024 – Present\n- Shipped the payments relay cutting failures by 40% using Spring Boot\n');
+    check('markdown-wrapped links from a LaTeX PDF do not become the contact fields', md.contact.email === 'a@b.com' && !md.contact.email?.includes('](') && !/\[/.test(md.contact.linkedin || ''), md.contact.linkedin);
+    check('a link around a company name resolves to the name, not its homepage', md.experience[0]?.company === 'Acme Corp', JSON.stringify(md.experience[0]?.company));
+    check('unwrap leaves prose and bare URLs alone', stripMarkdownLinks('no links here, just https://x.dev/a and (parens)') === 'no links here, just https://x.dev/a and (parens)');
+  }
   const docBuf = fs.readFileSync(new URL('sample-resume.docx', dir));
   const doc = await upload(new Blob([docBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), 'resume.docx');
   check('DOCX upload parsed (zip + xml path)', doc.status === 200 && (doc.data.resume?.summary?.chars || 0) > 1200, `${doc.data.resume?.summary?.chars} chars`);

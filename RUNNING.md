@@ -76,6 +76,7 @@ before `npm start`, or the browser gets a blank page.
 node scripts/load-resume.mjs --resume=~/Downloads/resume.pdf --notice=15
 node scripts/load-resume.mjs --resume=resume.txt --floor=1800000
 node scripts/load-resume.mjs --resume=resume.txt --base=http://127.0.0.1:3100   # app on another port
+node scripts/load-resume.mjs --resume=~/Downloads/x.pdf --dump=/tmp/resume.txt   # just show extracted text
 ```
 
 Flags (all optional except `--resume`):
@@ -88,6 +89,7 @@ Flags (all optional except `--resume`):
 | `--floor=<INR>` | salary floor. **Left unset on purpose** if you don't pass it — a guessed expectation answers a real form with a real lie, and the score follows it |
 | `--field=<id>` | override the target field (e.g. `data_science`) |
 | `--remote` | set `openToRemote: true` |
+| `--dump=<path>` | write the extracted text and exit (`--dump=stdout` prints only) — how to tell whether a mis-parse is the PDF's fault or the parser's |
 | `--seed` | force a re-seed of the 16 demo postings. An **empty** store gets them anyway; a populated one is left alone unless you pass this |
 
 The app must already be running (it calls the HTTP API — there is no direct
@@ -107,7 +109,7 @@ suggested field and accepts a real upload you can re-send to employers.
 
 ```bash
 npm test               # 5 suites, ~5 seconds, no network
-npm run test:e2e       # 111 checks; boots its own server on a random port :3210-3299
+npm run test:e2e       # 118 checks; boots its own server on a random port :3210-3299
 npm run test:all       # both
 ```
 
@@ -118,9 +120,9 @@ npm run test:all       # both
 | `test:render` — `scripts/render.test.mjs` | 14 | every tab in every state renders without throwing |
 | `test:features` — `scripts/features.test.mjs` | 89 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
-| `test:e2e` — `scripts/e2e.mjs` | 111 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → tailoring → intelligence → submit → exports |
+| `test:e2e` — `scripts/e2e.mjs` | 118 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → tailoring → intelligence → submit → exports |
 
-**248 checks, plus 14 render probes = 262.** Current tree: all green.
+**248 checks, plus 14 render probes = 262, plus 118 end-to-end.** Current tree: all green.
 
 Useful variants:
 

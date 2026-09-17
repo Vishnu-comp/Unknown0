@@ -123,7 +123,7 @@ with zero configuration and no network. Worked path:
 npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine + runtime checks
                     # · 14 render probes · 89 tailoring/intelligence/parsing checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-npm run test:e2e    # 111 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
+npm run test:e2e    # 118 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
 npm run test:all    # both
