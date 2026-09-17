@@ -319,6 +319,14 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
   ok(db.read('jobs', []).length === 1 && db.read('jobs', [])[0].id === 'job_real',
     'the one real posting survives the purge');
   ok(db.purgeDemoJobs().removed === 0, 'the purge is idempotent — a clean store costs nothing');
+  {
+    const r2 = fs.readFileSync('server/index.mjs', 'utf8');
+    // includes(), not a regex: the pinned text is itself a regex literal, and
+    // escaping one inside the other is how this broke the suite without failing it.
+    ok(r2.includes(`if (/profile=1/.test(req.url || ''))`) && r2.includes(`writeStore('profile', DEFAULT_PROFILE)`),
+      'reset clears an invented profile only when ?profile=1 is asked for');
+  }
+
   ok(db.purgeDemoJobs().orphans === undefined, 'nothing is reported once there is nothing to report');
   const src = fs.readFileSync('server/index.mjs', 'utf8');
   ok(/purgeDemoJobs,\s*\n\s*getApplications/.test(src) && /const purged = purgeDemoJobs\(\);/.test(src),

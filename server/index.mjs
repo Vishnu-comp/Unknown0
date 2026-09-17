@@ -20,6 +20,7 @@ import {
   write as writeStore,
   uid,
   FIELDS,
+  DEFAULT_PROFILE,
 } from './lib/db.mjs';
 import { scoreJob } from './lib/match.mjs';
 import { extractText, parseResume, suggestProfilePatch } from './lib/resume.mjs';
@@ -848,7 +849,17 @@ app.post(
     writeStore('applications', []);
     writeStore('jobs', []);
     writeStore('runs', { byDay: {}, log: [] });
-    json(res, { reset: true });
+    /* Off by default on purpose: your profile is the most expensive thing here to
+       re-type, so nobody gets it deleted by a stray click. But an install that predates
+       the scaffold DEFAULT_PROFILE can hold answers no resume ever stated (consent
+       ticks, a salary floor, a city) and until now the only way to clear them was to
+       notice a file and rm it. ?profile=1 is the explicit version of that. */
+    let profileCleared = false;
+    if (/profile=1/.test(req.url || '')) {
+      writeStore('profile', DEFAULT_PROFILE);
+      profileCleared = true;
+    }
+    json(res, { reset: true, profileCleared });
   })
 );
 
