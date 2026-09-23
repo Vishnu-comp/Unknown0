@@ -10,11 +10,26 @@
  *   node scripts/features.test.mjs
  */
 import fs from 'node:fs';
+
 import os from 'node:os';
 import path from 'node:path';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'applyflow-feat-'));
 process.env.DATA_DIR = tmp;
+
+function glob2list() {
+  /* Node 18 has no fs.globSync, and this repo still supports it — so walk by hand. */
+  const out = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.mjs')) out.push(p);
+    }
+  };
+  walk('server');
+  return out;
+}
 
 let passed = 0;
 let failed = 0;
@@ -386,13 +401,60 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
    "Settings → X" the server prints has to be a real Settings panel, and the runner policy
    (which is NOT in Settings) must be named by where it actually lives. */
 {
+  /* Every "Settings → X" the app prints — server messages, client copy and the docs —
+     has to name a panel that actually renders. Two failure modes were here before and
+     both are prevented now: a *wrong* noun ("Settings → Sources", "Settings → policy"),
+     and a message that ends right after the panel name so a regex looking for trailing
+     punctuation skipped it entirely. */
   const ui = fs.readFileSync('client/SettingsTab.jsx', 'utf8');
-  const svr = fs.readFileSync('server/index.mjs', 'utf8') + fs.readFileSync('server/lib/atsSubmit.mjs', 'utf8');
-  const promised = [...svr.matchAll(/Settings → ([A-Za-z][A-Za-z ]{1,24}?)(?=[^\sA-Za-z])/g)].map((m) => m[1].trim());
-  const known = (p) => ui.includes(p) || p.split(/\s+/).some((w) => w.length > 3 && ui.includes(w));
+  const appsUi = fs.readFileSync('client/AppsTab.jsx', 'utf8');
+  const clientCopy = ['App.jsx', 'JobsTab.jsx', 'ui.jsx', 'SettingsTab.jsx', 'AppsTab.jsx']
+    .map((f) => fs.readFileSync(`client/${f}`, 'utf8'))
+    .join('\n');
+  const docs = ['README.md', 'RUNNING.md', 'extension/README.md'].map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+  const svr = glob2list().map((f) => fs.readFileSync(f, 'utf8')).join('\n') + clientCopy + docs;
+
+  const titles = [
+    ...[...ui.matchAll(/<Panel title="([^"]+)"/g)].map((m) => m[1]),
+    ...[...ui.matchAll(/<h4 className="sec"[^>]*>([^<]+)</g)].map((m) => m[1]),
+  ].map((t) => t.toLowerCase());
+  ok(titles.length >= 4, `the Settings panels were enumerable for this check (${titles.length} found)`);
+
+  /* Match by looking for a panel name that FOLLOWS the arrow, not by greedily taking the
+     rest of the sentence: a pattern that captured "Job sources and press" once reported a
+     correct message as a broken one, and a test with false positives gets switched off. */
+  const heads = [];
+  for (const t of titles) {
+    const w = t.split(/\s+/);
+    for (let n = w.length; n >= 1; n--) heads.push(w.slice(0, n).join(' '));
+  }
+  heads.sort((a, b) => b.length - a.length);
+  const promised = [];
+  for (const m of svr.matchAll(/Settings → /g)) {
+    const tail = svr
+      .slice(m.index + 'Settings → '.length, m.index + 70)
+      .replace(/\s+/g, ' ')
+      // markdown emphasis is the docs' way of naming a button: **run auto-apply** → run auto-apply
+      .replace(/\*/g, '')
+      .toLowerCase();
+    /* heads is longest-first, so "Job sources and press" matches the real panel
+       "Job sources" and stops there; containment is deliberate — a sentence boundary
+       is not part of a panel's name. */
+    const hit = heads.find((h) => tail.startsWith(h));
+    promised.push(hit || (tail.match(/^[A-Za-z][A-Za-z -]{1,24}/) || ['«nothing»'])[0].trim());
+  }
+  const known = (p) => {
+    const q = p.toLowerCase().trim();
+    if (titles.some((t) => t === q || t.startsWith(q + ' ') || t.startsWith(q + '('))) return true;
+    // "Applications → X" names a control in that tab, not a Settings panel
+    return /^applications → /i.test(p) || appsUi.toLowerCase().split('\n').some((l) => l.includes(q));
+  };
   const unknown = [...new Set(promised)].filter((p) => !known(p));
-  ok(unknown.length === 0, `no server message points at a missing Settings panel (${unknown.join('", "') || 'all resolve'})`);
-  ok(/Auto-apply is off[\s\S]{0,160}Applications → Auto-apply policy/.test(svr), 'the runner-off error names Applications, where the toggle is');
+  ok(unknown.length === 0,
+    `no printed instruction points at a missing Settings panel (${unknown.join('", "') || 'all resolve'})`);
+  ok(promised.length >= 10, `the sweep actually found instructions to check (${promised.length})`);
+  ok(/Auto-apply is off[\s\S]{0,160}Applications → Auto-apply policy/.test(svr),
+    'the runner-off error names Applications → Auto-apply policy, not a mythical "policy" panel');
   ok(fs.readFileSync('client/App.jsx', 'utf8').includes("setTab(settings?.autoApply?.enabled ? 'settings' : 'apps')"),
     'the home "sources + policy" step sends you to Applications when the runner is the missing half');
   ok(/resetAll: \(\) => req\('POST', '\/api\/reset\?profile=1'\)/.test(fs.readFileSync('client/api.js', 'utf8')),
@@ -558,6 +620,46 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
     ok(find.includes("addEventListener('message'") && find.includes('applyflow:hand'),
       'the app page probes with a window message on its own origin');
   }
+}
+
+/* --------------------- filling a page you opened yourself ---------------------
+   Same lesson as the handoff: pin the contract between the three parties, because a
+   token in one file proves nothing about whether the other two agree with it. */
+{
+  const idx = fs.readFileSync('server/index.mjs', 'utf8');
+  const bg = fs.readFileSync('extension/background.js', 'utf8');
+  const cs = fs.readFileSync('extension/content.js', 'utf8');
+  const db = fs.readFileSync('server/lib/db.mjs', 'utf8');
+  const css = fs.readFileSync('extension/content.css', 'utf8');
+
+  const forSite = idx.indexOf("'/api/apps/for-site'");
+  const byId = idx.indexOf("'/api/apps/:id'");
+  ok(forSite > -1 && byId > -1 && forSite < byId,
+    'GET /api/apps/for-site is registered before /api/apps/:id (Express would otherwise answer it with "not found")');
+
+  /* each row: the exact text on the SENDING side, then on the RECEIVING side */
+  for (const [name, senderFile, sent, receiverFile, received] of [
+    ['the page asks the worker about the site it is standing on', cs, "type: 'applyflow:page-opened'", bg, "msg?.type === 'applyflow:page-opened'"],
+    ['the worker answers with the pack under a type the page handles', bg, "type: 'applyflow:for-site'", cs, "msg?.type === 'applyflow:for-site'"],
+    ["the chip's button names the pack it is showing", cs, "type: 'applyflow:fill-this'", bg, "msg?.type === 'applyflow:fill-this'"],
+    ['"always fill on this site" is remembered per host', cs, "type: 'applyflow:set-site'", bg, "msg?.type === 'applyflow:set-site'"],
+    ['a claimed handoff reaches the filler', bg, "type: 'applyflow:fill-handoff'", cs, "msg?.type !== 'applyflow:fill-handoff'"],
+  ]) ok(senderFile.includes(sent) && receiverFile.includes(received), `${name} (sender and receiver agree on one string)`);
+
+  ok(/autoFillSites && typeof autoFillSites === 'object'/.test(bg),
+    'a corrupted per-site map is ignored rather than trusted');
+  ok(bg.includes('serverUrl') && bg.includes('test(v) ? v : null'),
+    'the lookup only ever talks to a localhost server you configured — never a remote one');
+  ok(idx.includes('no drafted application matches that page yet'),
+    'a page with nothing for it gets a reason, not an empty surprise');
+  ok(cs.includes("id = 'applyflow-site'") && css.includes('#applyflow-site'),
+    'the on-page card is created and styled (a control nobody can see is not an option)');
+  ok(cs.includes('nothing was typed without you asking'),
+    'when it declines to auto-fill, the card says that out loud');
+  ok(db.includes("if (reason === 'exact URL') trustworthy = true;"),
+    'only the exact drafted posting is marked trustworthy, inside the ranking itself');
+  ok(bg.includes('pack.trustworthy !== true'),
+    "the worker obeys the server's flag instead of re-deriving trust from a string");
 }
 
 /* A default that is enabled but can never answer is its own kind of fiction. */

@@ -464,6 +464,40 @@ await j('/api/settings', { method: 'PUT', body: JSON.stringify({ atsSubmit: { en
 const pack = await fetch(`${BASE}/api/export/pack.md${otherApp ? `?id=${otherApp.id}` : `?id=${ghApp.id}`}`).then((r) => r.text());
 check('markdown pack now includes the tailored resume + posting intel', /## Tailored resume/.test(pack) && /## What this posting reveals/.test(pack), `${pack.split('\n').length} lines`);
 
+console.log('\n13. "I navigated to the page myself — fill it in"');
+{
+  const page = ghApp?.url || ghJob?.url;
+  const mine = await j(`/api/apps/for-site?page=${encodeURIComponent(page)}`);
+  const packs = mine.data?.packs || [];
+  check('the route answers before any /api/apps/:id route could swallow it', mine.status === 200 && Array.isArray(packs));
+  check('the posting you drafted against is found and marked trustworthy',
+    packs.some((x) => x.appId === ghApp.id && x.reason === 'exact URL' && x.trustworthy === true),
+    JSON.stringify(packs.map((x) => [x.appId, x.reason, x.trustworthy])).slice(0, 140));
+  check('and it carries the real pack, not a stub',
+    packs[0]?.payload?.fields && Object.keys(packs[0].payload.fields).length > 5 && typeof packs[0].letter === 'string',
+    `${Object.keys(packs[0]?.payload?.fields || {}).length} fields, ${(packs[0]?.letter || '').length} letter chars`);
+  /* built from the app's own URL so the host genuinely matches: a hard-coded board that
+     no fixture shares would make this pass by matching nothing at all. */
+  const u = new URL(ghApp.url);
+  const otherPath = u.pathname.split('/').filter(Boolean).slice(0, 1).concat(['a-different-employer', 'jobs', '42']).join('/');
+  const foreign = await j(`/api/apps/for-site?page=${encodeURIComponent(`${u.origin}/${otherPath}`)}`);
+  const fp = foreign.data?.packs || [];
+  check('a different employer on that same ATS host is offered only as an untrustworthy guess',
+    fp.length > 0 && fp.every((x) => x.trustworthy === false),
+    JSON.stringify(fp.map((x) => [x.reason, x.trustworthy])).slice(0, 160));
+  const nothing = await j('/api/apps/for-site?page=' + encodeURIComponent('https://www.google.com/search?q=jobs'));
+  check('a page with nothing drafted for it returns an empty list plus a hint',
+    nothing.status === 200 && nothing.data.count === 0 && /no drafted application matches/.test(nothing.data.hint || ''));
+  const garbage = await j('/api/apps/for-site?page=javascript%3Aalert(1)');
+  check('a non-http page is refused outright, not matched against anything', garbage.status === 400);
+  if (otherApp) {
+    const their = await j(`/api/apps/for-site?page=${encodeURIComponent(otherApp.url)}`);
+    check('the comparison application is findable on its own page',
+      (their.data?.packs || []).some((x) => x.appId === otherApp.id),
+      JSON.stringify((their.data?.packs || []).map((x) => [x.appId, x.reason])).slice(0, 120));
+  }
+}
+
 console.log(`\n\x1b[1m${pass} passed, ${fail} failed\x1b[0m\n`);
 if (child) child.kill('SIGTERM');
 atsMock.close();

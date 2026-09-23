@@ -111,7 +111,7 @@ failed fetch is reported as a failure — never as "no jobs today".
 Two ways listings get in, both real:
 
 1. **`POST /api/jobs/fetch`** — the "fetch live jobs" button. Needs outbound HTTPS.
-2. **Settings → Import jobs JSON**, or the extension's "send this page" button, for a
+2. **Settings → Import jobs**, or the extension's "send this page" button, for a
    LinkedIn/Naukri tab you already have open. This is the path that works in a
    locked-down sandbox, and it is still your data, not filler written for you.
 
@@ -126,7 +126,7 @@ Worked path:
 5. **Applications → review a pack → copy extension payload, or open the apply URL**
 6. **Greenhouse or Lever posting?** → *preview payload (dry run)*, read what would
    be sent, then **Settings → Direct ATS submit** on and `confirm + send now`
-7. **Settings → sources**: turn on Adzuna, Greenhouse, Lever or Naukri for live
+7. **Settings → Job sources**: turn on Adzuna, Greenhouse, Lever or Naukri for live
    postings (the boot fetch can be silenced with `FETCH_ON_BOOT=0`)
 8. **Run auto-apply** (top-right) — or let cron do it (see below)
 
@@ -157,7 +157,7 @@ npm test            # 53 field-mapper/filler checks (jsdom) · 30 match-engine +
                     #   route order, and that the API makes no claim it did not measure)
                     # · 18 render probes (incl. a genuinely blank first-run profile) · 134 tailoring/intelligence/parsing/attestation checks
                     # · 76 direct-submit guard-rail checks (local mock ATS)
-                    # = 463 (53+30+126+18+160+76), and `npm run test:all` adds 132 e2e = 595
+                    # = 502 (53+30+24+126+18+175+76), and `npm run test:all` adds 139 e2e = 641
 npm run test:e2e    # 132 checks: ingest → PDF/DOCX/TXT parsing → scoring → letters → caps →
                     # pipeline → import route → tailoring → intelligence → direct submit → exports
                     # (boots its own server on a random port with a throwaway DATA_DIR)
@@ -251,7 +251,7 @@ it. `composeApplication({ useInsights: false })` turns the nudge off entirely.
 | **Naukri** (unofficial) | no | their own search endpoint, then server-rendered HTML — undocumented and behind an anti-bot challenge, so expect it to break | works as-is; falls back to Settings → Import |
 | **Demo corpus** | no | 16 realistic postings incl. deliberately bad ones | works as-is |
 
-Credentials can live in `data/settings.json` (Settings → Sources) or env vars:
+Credentials can live in `data/settings.json` (Settings → Job sources) or env vars:
 
 ```bash
 export ADZUNA_APP_ID=… ADZUNA_APP_KEY=… ADZUNA_COUNTRY=in

@@ -113,6 +113,39 @@ $('#survey').addEventListener('click', async () => {
   $('#tab-log').hidden = false;
 });
 
+$('#askSite').addEventListener('click', async () => {
+  const box = $('#site-status');
+  const t = await activeTab();
+  if (!t?.url || !/^https?:\/\//i.test(t.url)) {
+    box.textContent = 'this tab is not a web page I can ask about';
+    return;
+  }
+  box.textContent = 'asking your local server…';
+  /* the lookup lives in the worker (a popup is a page of its own: it cannot fetch
+     localhost with the same origin rules, and the worker already owns the answer) */
+  let r = null;
+  try {
+    r = await chrome.runtime.sendMessage({ type: 'applyflow:page-opened', url: t.url, tabIdHint: t.id });
+  } catch (e) {
+    box.textContent = 'the worker did not answer — reopen the popup once to wake it';
+    return;
+  }
+  if (!r?.ok) {
+    box.textContent = r?.error || 'lookup failed';
+    return;
+  }
+  if (!r.found) {
+    box.textContent = 'nothing drafted matches this page — open the job in ApplyFlow and draft a pack first';
+    return;
+  }
+  box.textContent = `${r.found} pack(s) — best: ${r.reason || 'unranked'}${r.fill ? ' · filling' : ' · not auto-filling (you can fill manually)'}`;
+  if (r.pack?.fields) {
+    state.pack = r.pack;
+    const f = await send({ type: 'autofill', pack: r.pack });
+    box.textContent += ` · wrote ${f?.touched ?? 0} empty field(s)`;
+  }
+});
+
 $('#pasteFocused').addEventListener('click', async () => {
   if (!state.pack?.letter) return alert('no letter in the loaded pack');
   const r = await send({ type: 'pasteFocused', text: state.pack.letter });

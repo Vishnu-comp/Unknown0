@@ -330,4 +330,89 @@
       }
     }, 700);
   }, 900);
+
+  /* ------------------- "the user navigated here themselves" -------------------
+     Nothing here fills anything on its own: it asks the worker, and the worker only
+     says "auto" when the server ranked this page against a pack you already drafted
+     and reviewed. Either way the page says out loud what it found — including when it
+     found nothing, which is the answer for the nine job sites out of ten with no pack. */
+  let siteInfo = null;
+  function askAboutPage() {
+    try {
+      chrome.runtime
+        .sendMessage({ type: 'applyflow:page-opened', url: location.href, title: document.title })
+        .then((r) => {
+          if (!r?.ok) return;
+        })
+        .catch(() => {});
+    } catch {}
+  }
+  function renderSiteCard() {
+    const el = document.getElementById('applyflow-site') || (() => {
+      const d = document.createElement('div');
+      d.id = 'applyflow-site';
+      document.documentElement.appendChild(d);
+      return d;
+    })();
+    const i = siteInfo;
+    if (!i) {
+      el.innerHTML = '<b>ApplyFlow</b> <span class="af-dim">checking this page…</span>';
+      return;
+    }
+    if (!i.pack) {
+      el.innerHTML =
+        `<b>ApplyFlow</b> <span class="af-dim">${esc(i.note || 'no drafted application matches this page')}</span>` +
+        '<button id="af-recheck">ask again</button>';
+      el.querySelector('#af-recheck').addEventListener('click', askAboutPage);
+      return;
+    }
+    const p = i.pack;
+    const vague = !i.auto.fill;
+    el.innerHTML =
+      `<b>ApplyFlow</b> <span class="af-ok">${esc(p.title)}${p.company ? ' · ' + esc(p.company) : ''}</span>` +
+      `<span class="af-dim">${esc(p.reason || '')}${p.score != null ? ' · match ' + p.score : ''}</span>` +
+      (i.auto.fill
+        ? '<span class="af-ok">filling empty fields…</span>'
+        : `<button id="af-fill-this">${esc(i.auto.why === 'auto-fill is off for this site' ? 'fill all details' : 'fill anyway')}</button>`) +
+      (i.others?.length
+        ? `<button id="af-other" class="af-ghost">${i.others.length} more drafted pack${i.others.length > 1 ? 's' : ''} for this site</button>`
+        : '') +
+      `<button id="af-site-on" class="af-ghost">${i.auto.siteOn ? 'stop auto-filling here' : 'always fill on this site'}</button>` +
+      (vague ? '<span class="af-warn">nothing was typed without you asking</span>' : '');
+    const fill = el.querySelector('#af-fill-this');
+    if (fill)
+      fill.addEventListener('click', () => {
+        try {
+          chrome.runtime.sendMessage({ type: 'applyflow:fill-this', appId: p.appId, url: location.href, overwrite: false }).catch(() => {});
+        } catch {}
+        note(`fill requested for ${p.title} (${p.reason || 'unranked'})`, 'info');
+      });
+    const other = el.querySelector('#af-other');
+    if (other)
+      other.addEventListener('click', () => {
+        note(
+          'other packs on this site: ' + i.others.map((o) => `${o.title} @ ${o.company} — ${o.reason}`).join(' | '),
+          'info'
+        );
+      });
+    el.querySelector('#af-site-on').addEventListener('click', (e) => {
+      const on = !i.auto.siteOn;
+      try {
+        chrome.runtime.sendMessage({ type: 'applyflow:set-site', host: i.host, on }).catch(() => {});
+      } catch {}
+      siteInfo = { ...i, auto: { ...i.auto, siteOn: on, fill: on && i.pack.trustworthy === true } };
+      renderSiteCard();
+      note(`auto-fill ${on ? 'on' : 'off'} for ${i.host}`, on ? 'ok' : 'dim');
+    });
+  }
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'applyflow:for-site' && String(msg.url || '') === location.href) {
+      siteInfo = msg;
+      renderSiteCard();
+      if (msg.auto?.fill) note(`auto-fill started: ${msg.pack?.title} (${msg.auto.why})`, 'ok');
+    }
+  });
+  setTimeout(askAboutPage, 1200);
+  if (document.readyState === 'complete') setTimeout(askAboutPage, 1200);
+  else window.addEventListener('load', () => setTimeout(askAboutPage, 900), { once: true });
 })();

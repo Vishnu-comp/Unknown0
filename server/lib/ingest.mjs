@@ -258,7 +258,7 @@ async function jooble(cfg) {
    Add board slugs in Settings (e.g. "airbnb", "stripe", "datadog"). */
 async function greenhouse(cfg) {
   const boards = cfg.boards || [];
-  if (!boards.length) throw new Error('greenhouse: no board slugs configured — add a few in Settings → Sources (stripe, datadog, ramp, coinbase, postman…). Nothing was fetched.');
+  if (!boards.length) throw new Error('greenhouse: no board slugs configured — add a few in Settings → Job sources (stripe, datadog, ramp, coinbase, postman…). Nothing was fetched.');
   const out = [];
   const unreachable = [];
   const skipped = [];
@@ -306,7 +306,7 @@ async function greenhouse(cfg) {
 /* ------------------------------- Lever postings ----------------------------- */
 async function lever(cfg) {
   const orgs = cfg.companies || [];
-  if (!orgs.length) throw new Error('lever: no org slugs configured — add a few in Settings → Sources (netflix, palantir, plaid…). Nothing was fetched.');
+  if (!orgs.length) throw new Error('lever: no org slugs configured — add a few in Settings → Job sources (netflix, palantir, plaid…). Nothing was fetched.');
   const out = [];
   const unreachable = [];
   const skipped = [];
@@ -410,7 +410,7 @@ export const SOURCES = {
   greenhouse: { label: 'Greenhouse ATS boards', needsKey: false, run: greenhouse },
   lever: { label: 'Lever ATS postings', needsKey: false, run: lever },
   naukri: {
-    label: 'Naukri (unofficial — no public API, may be blocked; see Settings → Import jobs JSON)',
+    label: 'Naukri (unofficial — no public API, may be blocked; see Settings → Import jobs)',
     needsKey: false,
     run: naukri,
     volatile: true,

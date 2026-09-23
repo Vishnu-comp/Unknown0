@@ -289,7 +289,7 @@ function Dashboard({ meta, profile, completeness, jobs, apps, appStats, resume, 
             {!top.length && (
               <div className="empty">
                 <b>no jobs in the store — and there is no offline filler any more</b>
-                enable a source in Settings → Sources and press <i>fetch live jobs</i>, or read a page you already have open with the extension (Harvest → import).
+                enable a source in Settings → Job sources and press <i>fetch live jobs</i>, or read a page you already have open with the extension (Harvest → import).
                 A fetch that is blocked or rate-limited will tell you so here rather than showing you made-up postings.
               </div>
             )}

@@ -21,6 +21,7 @@ import {
   uid,
   FIELDS,
   DEFAULT_PROFILE,
+  rankAppsForSite,
 } from './lib/db.mjs';
 import { scoreJob } from './lib/match.mjs';
 import { extractText, parseResume, suggestProfilePatch } from './lib/resume.mjs';
@@ -72,6 +73,7 @@ const ROUTES = `ApplyFlow API
   POST /api/apps/draft {jobIds:[]}    compose letter + answers + prefill pack
   GET  /api/apps | PATCH /api/apps/:id | POST /api/apps/:id/status | DELETE /api/apps/:id
   GET  /api/apps/:id/prefill | /api/apps/:id/extension-payload | /api/apps/:id/tailored.txt
+  GET  /api/apps/for-site?page=<url>      which pack belongs to a page you opened yourself
   POST /api/apps/:id/submit {confirm}  Greenhouse/Lever public API (dry run unless confirm)
   GET  /api/apps/:id/submit-support | /api/submissions
   GET  /api/export/prefill.json | /api/export/pack.md[?id=]
@@ -423,8 +425,8 @@ async function ingestFromSources({ keys = null, profile = null } = {}) {
         'Nothing to fetch from. ' +
         (dropped.length
           ? `These are enabled but match no adapter: ${dropped.join(', ')}. Known: ${Object.keys(SOURCES).join(', ')}.`
-          : 'Turn a source on in Settings → Sources (Adzuna and Jooble need a free key; github_archive, greenhouse, lever and naukri do not).') +
-        ' Alternatively hand me listings yourself: Settings → Import jobs JSON, or the browser extension’s “send this page” button.',
+          : 'Turn a source on in Settings → Job sources (Adzuna and Jooble need a free key; github_archive, greenhouse, lever and naukri do not).') +
+        ' Alternatively hand me listings yourself: Settings → Import jobs, or the browser extension’s “send this page” button.',
     };
   }
   const { jobs, errors, fetchedAt } = await fetchAll(enabled, who);
@@ -438,7 +440,7 @@ async function ingestFromSources({ keys = null, profile = null } = {}) {
       error:
         `Nothing came back from: ${enabled.map((e) => e.key).join(', ')}.` +
         (errors.length ? ` Errors → ${errors.join(' | ')}` : '') +
-        ' — nothing was merged, so the store still holds your last good jobs. A blocked or filtered network looks exactly like a quiet board, so check the errors above before assuming there are no jobs — or skip the network entirely: Settings → Import jobs JSON, or the extension on a page you already have open.',
+        ' — nothing was merged, so the store still holds your last good jobs. A blocked or filtered network looks exactly like a quiet board, so check the errors above before assuming there are no jobs — or skip the network entirely: Settings → Import jobs, or the extension on a page you already have open.',
     };
   }
   const merged = mergeJobs(jobs, getJobs());
@@ -473,6 +475,44 @@ app.get(
         today: countsToday().total,
         sources: [...new Set(apps.map((a) => a.source))],
       },
+    });
+  })
+);
+
+/* "I navigated here myself, fill it in" — the extension asks which drafted pack belongs
+   to the page the user is standing on. Every answer carries its `reason`, and the page is
+   never left guessing: no match is a 200 with an empty list and a `hint`, because an error
+   there would be the app claiming something about a site it has never seen.
+   Registered BEFORE /api/apps/:id on purpose — Express matches in registration order, so
+   otherwise "for-site" would be swallowed as an application id and answer "not found". */
+app.get(
+  '/api/apps/for-site',
+  handle((req, res) => {
+    const page = String(req.query?.page || req.query?.site || '');
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(page)) {
+      throw bad('pass ?page=<the full URL you are looking at>, e.g. ?page=https://job-boards.greenhouse.io/gitlab/jobs/123');
+    }
+    const ranked = rankAppsForSite(getApplications(), page);
+    json(res, {
+      page,
+      count: ranked.length,
+      packs: ranked.map(({ app: a, reason, shared, trustworthy }) => ({
+        appId: a.id,
+        title: a.title,
+        company: a.company,
+        url: a.url,
+        score: a.score || null,
+        status: a.status,
+        reason,
+        trustworthy: Boolean(trustworthy),
+        titleWordsInCommon: shared,
+        letter: a.letter || '',
+        answers: a.answers || [],
+        payload: a.prefill,
+      })),
+      hint: ranked.length
+        ? null
+        : 'no drafted application matches that page yet — draft one in Applications first (a pack is built per job, so the extension only fills what you have already reviewed)',
     });
   })
 );
@@ -958,7 +998,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       try {
         const enabled = Object.keys(getSettings()?.sources || {}).filter((k) => getSettings().sources[k]);
         if (!enabled.length) {
-          console.log(`  · no jobs in the store and no sources enabled — turn one on in Settings → Sources, or push harvested rows to POST /api/jobs/import`);
+          console.log(`  · no jobs in the store and no sources enabled — turn one on in Settings → Job sources, or push harvested rows to POST /api/jobs/import`);
         } else if (!getJobs().length || process.env.FETCH_ON_BOOT === 'force') {
           const r = await ingestFromSources({ keys: enabled });
           console.log(r.ok

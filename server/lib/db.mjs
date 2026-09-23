@@ -203,3 +203,58 @@ export function getResume() {
 export function saveResume(doc) {
   return write('resume', doc);
 }
+/* A job board hosts every company on one host (job-boards.greenhouse.io/gitlab/…,
+   jobs.lever.co/stripe/…), so a page the user opened by hand cannot be matched by
+   host alone: "same host, different company" is a *weaker* claim and must be labelled
+   as one. The ranking below is what makes that visible instead of quietly filling the
+   wrong application into a form. */
+const siteUrl = (u) => { try { return new URL(String(u || '')); } catch { return null; } };
+const hostOf = (u) => (siteUrl(u)?.hostname || '').toLowerCase().replace(/^www\./, '');
+const boardOf = (u) => {
+  const s = siteUrl(u);
+  if (!s) return '';
+  const seg = (s.pathname || '').split('/').filter(Boolean)[0] || '';
+  return seg.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+};
+const tokens = (t) =>
+  new Set(String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 3));
+
+export function rankAppsForSite(apps, pageUrl) {
+  const ph = hostOf(pageUrl);
+  const pb = boardOf(pageUrl);
+  const path = (siteUrl(pageUrl)?.pathname || '').replace(/\/+/g, '/');
+  const pt = tokens(
+    path
+      .replace(/\/(jobs?|postings?|openings?|apply|careers?)\/?/gi, ' ')
+      .replace(/\/\d+\/?$/, '')
+      .replace(/[-_.]+/g, ' ')
+  );
+  const ranked = [];
+  for (const a of apps || []) {
+    if (!a?.prefill?.fields) continue;
+    const ah = hostOf(a.url);
+    const ab = boardOf(a.url);
+    const at = tokens(a.title);
+    let shared = 0;
+    for (const w of at) if (pt.has(w)) shared++;
+    let reason = null;
+    let trustworthy = false;
+    if (ah && ah === ph && ab && ab === pb && a.id && siteUrl(a.url)?.pathname === siteUrl(pageUrl)?.pathname) { reason = 'exact URL'; trustworthy = true; }
+    else if (ah && ah === ph && ab && ab === pb) { reason = 'same board, different posting'; trustworthy = false; }
+    /* Same host, different company is what a shared ATS looks like (job-boards.greenhouse.io
+       hosts thousands of employers). It is a *candidate*, never something to type silently. */
+    else if (ah && ah === ph) { reason = 'same board host, different company'; trustworthy = false; }
+    else if (pb && ab && pb === ab) { reason = 'same board slug, different host'; trustworthy = false; }
+    if (!reason) continue;
+    /* Deliberately the *only* trust rule: the posting you drafted against. Title overlap
+       with a URL slug is not evidence that this is the same job — GitLab has 40 openings on
+       this one host, and filling AI Engineer's answers into Senior Platform Engineer's form
+       is a worse outcome than filling nothing. Everything else stays a click-yourself offer. */
+    if (reason === 'exact URL') trustworthy = true;
+    const tier = { 'exact URL': 40, 'same board, different posting': 30, 'same board host, different company': 10 }[reason] ?? 8;
+    const rank = tier + shared;
+    ranked.push({ app: a, reason, shared, rank, trustworthy });
+  }
+  ranked.sort((x, y) => y.rank - x.rank || (y.app.score || 0) - (x.app.score || 0));
+  return ranked;
+}

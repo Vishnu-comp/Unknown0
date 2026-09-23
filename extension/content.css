@@ -20,3 +20,14 @@
 .af-dim { color: #64748b; }
 .af-info { color: #7dd3fc; }
 .af-ok { color: #e6eef2; }
+
+/* the "I came here myself" card: one line, bottom-left, never over a form field */
+#applyflow-site { position: fixed; left: 12px; bottom: 12px; z-index: 2147483646;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 46vw;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: #e6eef2;
+  background: rgba(11,18,26,.95); border: 1px solid #22323f; border-radius: 10px;
+  padding: 7px 9px; box-shadow: 0 8px 26px rgba(0,0,0,.45); }
+#applyflow-site button { font: inherit; cursor: pointer; color: #0b1218; background: #34d399;
+  border: 0; border-radius: 6px; padding: 3px 7px; }
+#applyflow-site button.af-ghost { color: #cfe3ee; background: transparent; border: 1px solid #2c3f4e; }
+#applyflow-site .af-warn { color: #fbbf24; } #applyflow-site .af-dim { color: #8aa2b4; }

@@ -266,9 +266,10 @@ ok(/CERT\|SSL\|TLS\|UNABLE_TO_/.test(ingestMjs), 'networkHint recognises TLS-int
   ok(/await diagnoseTls\(host, e\)/.test(hintCode), 'networkHint asks the peer for its certificate before naming a cause');
   ok(!/sandbox or behind an egress allowlist/.test(hintCode),
     'networkHint states only host+reason: three boards used to print the same forty-word advice three times and bury what differed');
-  ok(/A blocked or filtered network looks exactly like a quiet board/.test(idxCode) &&
-    /Settings → Import jobs JSON/.test(idxCode),
-    'the advice survives exactly once, in the run summary built by index.mjs');
+  const advice = (idxCode.match(/A blocked or filtered network looks exactly like a quiet board/g) || []).length;
+  const pointer = (idxCode.match(/Settings → Import jobs/g) || []).length;
+  ok(advice === 1 && pointer >= 1,
+    `the advice survives exactly once, in the run summary built by index.mjs (advice=${advice}, pointer=${pointer})`);
   ok(/A blocked or filtered network looks exactly like a quiet board/.test(idxCode),
     'it is stated once instead, on the run summary');
 }

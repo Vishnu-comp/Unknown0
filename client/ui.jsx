@@ -227,7 +227,7 @@ export function RealtimeActions({ meta, refresh, busy, setBusy, toast, variant =
 
   async function go() {
     if (!targets.length) {
-      toast?.('No sources enabled yet — turn one on in Settings → Sources (Greenhouse, Lever, the GitHub archive and Naukri need no key).', 'warn', 9000);
+      toast?.('No sources enabled yet — turn one on in Settings → Job sources (Greenhouse, Lever, the GitHub archive and Naukri need no key).', 'warn', 9000);
       return;
     }
     setBusy?.(true);
