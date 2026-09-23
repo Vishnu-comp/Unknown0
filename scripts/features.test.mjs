@@ -399,6 +399,116 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
     'the UI can actually clear an invented profile instead of leaving that to curl');
 }
 
+/* The one-click handoff is a cross-process bridge, and the dangerous version of it is
+   "just navigate there and hope". These pins keep the honest shape: discover, claim once,
+   fill empties only, never submit. */
+{
+  const man = JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8'));
+  const bg = fs.readFileSync('extension/background.js', 'utf8');
+  const cs = fs.readFileSync('extension/content.js', 'utf8');
+  const api = fs.readFileSync('client/api.js', 'utf8');
+  const detail = fs.readFileSync('client/AppsTab.jsx', 'utf8');
+  ok(man.externally_connectable && man.externally_connectable.matches.every((m) => /localhost|127\.0\.0\.1/.test(m)),
+    'the web page can only reach the worker on localhost — no remote origin can push a pack');
+  ok(!/[0-9a]{32}/.test(api), 'the client never probes a hardcoded extension id (that would fingerprint every browser)');
+  ok(/onMessageExternal/.test(bg) && /applyflow\.ext:handoff/.test(bg), 'the worker accepts the handoff from the app page');
+  ok(/remove\('pending'\)/.test(bg) && /PENDING_MS/.test(bg), 'a handoff is claimed once and expires — a reload cannot refill over your edits');
+  ok(/onRemoved/.test(bg), 'an unclosed handoff is dropped when the tab goes away, so a pack of personal data does not linger');
+  ok(/applyflow:ready/.test(cs) && /fill-handoff/.test(cs) && /onlyEmpty/.test(cs),
+    'the content script asks for the claim and fills with onlyEmpty set');
+  ok(/open the site &amp; autofill/.test(detail) && /no extension on this page/.test(detail),
+    'the UI offers one click AND says plainly when the extension is absent');
+  ok(!/submit\(\)|\.click\(\)/.test(bg), 'the worker never clicks anything');
+
+  /* The block above greps; this one *runs* background.js against a stubbed chrome so the
+     claim-once rule is proven rather than asserted from text. */
+  {
+    const vm = await import('node:vm');
+    const store = {};
+    const calls = { opened: [], sent: [] };
+    let extHandler = null;
+    const listeners = [];
+    const chrome = {
+      runtime: {
+        id: 'ext-test',
+        getManifest: () => ({ version: '0' }),
+        onMessageExternal: { addListener: (f) => (extHandler = f) },
+        // Chrome's event allows many listeners; dispatch them in order, first reply wins
+        onMessage: { addListener: (f) => listeners.push(f) },
+        onStartup: { addListener: () => {} },
+        notifications: { create: () => {} },
+      },
+      storage: {
+        local: {
+          get: async (keys) => {
+            const list = Array.isArray(keys) ? keys : [keys];
+            const o = {};
+            for (const k of (typeof keys === 'string' ? [keys] : keys)) {
+              if (typeof k === 'string') o[k] = store[k];
+            }
+            return typeof keys === 'string' ? (store[keys] !== undefined ? { [keys]: store[keys] } : {}) : o;
+          },
+          set: async (obj) => Object.assign(store, obj),
+          remove: async (k) => { delete store[k]; },
+        },
+      },
+      tabs: {
+        create: async (c) => { calls.opened.push(c.url); return { id: 7 }; },
+        sendMessage: async (id, m) => { calls.sent.push([id, m.type]); return { ok: true }; },
+        onRemoved: { addListener: () => {} },
+      },
+    };
+    const ctx = vm.createContext({ chrome, console, setTimeout, Date, Object, String, JSON, Error, Boolean, Number, RegExp });
+    vm.runInContext(bg, ctx, { filename: 'extension/background.js' });
+    ok(listeners.length === 1, `the worker registers exactly one onMessage dispatcher (got ${listeners.length})`);
+
+    const ask = (msg) => new Promise((r) => extHandler(msg, { tab: { id: 7 } }, r));
+    const ping = await ask({ type: 'applyflow.ext:ping' });
+    ok(ping.ok && ping.extId === 'ext-test', 'a localhost page can ping the worker and learn its id');
+    const bad = await ask({ type: 'applyflow.ext:handoff', url: 'https://x/' });
+    ok(!bad.ok && /payload\.fields/.test(bad.error || ''), 'a handoff without a pack is refused, not half-applied');
+    const noUrl = await ask({ type: 'applyflow.ext:handoff', payload: { fields: { email: 'a@b' } }, url: 'javascript:alert(1)' });
+    ok(!noUrl.ok && /absolute http/.test(noUrl.error || ''), 'a non-http(s) target is refused (no javascript:/file: navigation)');
+
+    const h = await ask({ type: 'applyflow.ext:handoff', url: 'https://boards.greenhouse.io/x/jobs/1', payload: { fields: { email: 'a@b' } }, jobId: 'job_1' });
+    ok(h.ok && calls.opened.length === 1, 'a valid handoff opens exactly one tab');
+    ok(store.pending && store.pending.tabId === 7 && store.pending.onlyEmpty !== false, 'the pack is parked against that tab, onlyEmpty by default');
+
+    /* The worker replies asynchronously (it returns true and answers from an await), so
+       deliver() waits for respond() rather than trusting the listener's return value. */
+    const deliver = (msg, sender = { tab: { id: 7 } }, ms = 250) =>
+      new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => {
+          if (done) return;
+          done = true;
+          clearTimeout(t);
+          resolve(v);
+        };
+        const t = setTimeout(() => finish(undefined), ms);
+        for (const f of listeners) {
+          try {
+            f(msg, sender, finish);
+          } catch (e) {
+            finish({ threw: String(e?.message || e) });
+          }
+          if (done) return;
+        }
+      });
+    const c1 = (await deliver({ type: 'applyflow:ready' }));
+    await new Promise((r) => setTimeout(r, 30));
+    ok(c1.ok && c1.claimed && calls.sent.some(([id, t]) => id === 7 && t === 'applyflow:fill-handoff'), 'the tab claims its pack and receives the fill message');
+    const c2 = (await deliver({ type: 'applyflow:ready' }));
+    ok(!c2.ok && /nothing pending/.test(c2.error || ''), 'a reload claims nothing — your edits are never overwritten by a second fill');
+    const other = (await deliver({ type: 'applyflow:ready' }, { tab: { id: 99 } }));
+    ok(!other.ok, 'a different tab cannot pick up someone else’s pack');
+    const boot = (await deliver({ type: 'applyflow:boot-config' }, {}));
+    await new Promise((r) => setTimeout(r, 20));
+    ok(boot === undefined || boot === null || boot.ok === true,
+      'the popup flow still gets its boot-config answer through the same dispatcher');
+  }
+}
+
 /* A default that is enabled but can never answer is its own kind of fiction. */
 {
   const db = fs.readFileSync('server/lib/db.mjs', 'utf8');

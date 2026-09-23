@@ -121,7 +121,7 @@ suggested field and accepts a real upload you can re-send to employers.
 ## 3. Tests
 
 ```bash
-npm test               # 6 suites, 437 checks, ~6 seconds
+npm test               # 6 suites, 455 checks, ~6 seconds
 npm run doctor           # read-only diagnosis of Node, TLS trust, proxies, sources
 npm run test:harvest   # harvester + ingest-config alone (jsdom fixtures for the LinkedIn/Naukri
                        # scrapers, settings→adapter resolution, how fetch failures are reported)
@@ -134,12 +134,12 @@ npm run test:all       # both
 | `test:unit` — `scripts/fieldmap.test.mjs` | 53 | field mapper finds the right inputs (jsdom), filler respects checkboxes/ selects / React-controlled inputs |
 | `test:match` — `scripts/match.test.mjs` | 30 | scoring invariants: `core` weight is real but modest, no inflation, no fabricated FX conversion, blockers dominate, vector path ≡ direct path |
 | `test:render` — `scripts/render.test.mjs` | 18 | every tab in every state renders without throwing — incl. a harvested job, whose full-ISO date and unparsed pay used to render wrong |
-| `test:features` — `scripts/features.test.mjs` | 134 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
+| `test:features` — `scripts/features.test.mjs` | 152 | tailoring, letters, resume-parsing hygiene, posting intelligence, cross-role misattribution guard |
 | `test:harvest` — `scripts/harvest.test.mjs` | 126 | the job-page readers: salary/date shapes, both Naukri paths (embedded JSON, markup), the LinkedIn card + detail scrapers in jsdom, and the invariants that matter — no company guessed from a slug, no wrong-scale salary, no card text leaking into a title, duplicate cards collapsing to one row |
 | `test:ats` — `scripts/ats.test.mjs` | 76 | dry-run → confirm → send against a **local mock Greenhouse/Lever** (started in-process, no ATS account needed); caps, idempotency, audit log |
 | `test:e2e` — `scripts/e2e.mjs` | 132 | ingest → PDF/DOCX/TXT → scoring → letters → caps → pipeline → **import route** → tailoring → intelligence → submit → exports |
 
-**53 + 30 + 126 + 18 + 134 + 76 = 437 checks, plus 132 end-to-end = 569.** Current tree: all green
+**53 + 30 + 126 + 18 + 152 + 76 = 455 checks, plus 132 end-to-end = 587.** Current tree: all green
 (run on Node 22 here because that is the only runtime in this sandbox; the dependency pins and
 the version guard keep Node 18.0 supported — see §0).
 
@@ -170,8 +170,20 @@ npm run build        # also runs sync:extension — do this after any server/lib
 
 1. `chrome://extensions` → toggle **Developer mode**
 2. **Load unpacked** → select the `extension/` folder
-3. In ApplyFlow: **Applications → review a pack → "copy extension payload"**
-4. Open the job's apply URL → click the extension icon → **Fill**
+3. In ApplyFlow: **Applications → open a pack → "open the site & autofill"** — the app
+   finds the extension on the page, hands the pack to the extension's worker, and the
+   worker opens the posting and fills it when the page reports ready (empty fields only,
+   `null` answers skipped, nothing submitted). No popup click, no pasting.
+The handshake is `window.postMessage` → `chrome.runtime.onMessageExternal` (origin-
+checked, and the manifest only lets `localhost`/`127.0.0.1` pages reach it), so no extra
+permission is needed and no other site can hand the extension anything. Both sides of it
+are executed by `npm run test:features` against a stubbed `chrome` — including that a
+pack is claimed **once** (a reload of the posting must not refill over your edits), that
+another tab cannot pick up your pack, and that a `javascript:` apply URL is refused.
+Anything that cannot be answered truthfully arrives as `null`/unchecked rather than a guess.
+
+4. Fallback for any browser where that handshake fails: **"copy extension payload"** →
+   open the apply URL → click the extension icon → **Fill**
 
 The payload travels via `chrome.storage.local`, not a URL, so the extension
 needs no host permission for your ApplyFlow server and works when the API is

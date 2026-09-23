@@ -89,6 +89,43 @@ export const api = {
   exportPackUrl: '/api/export/pack.md',
 };
 
+/* ---------------- extension bridge (open the site AND fill it) ----------------
+   A page cannot script another tab, so the only honest route is chrome.runtime
+   messaging into the add-on's worker, which the worker relays to its own content
+   script. We discover the extension id by postMessage — the content script on THIS
+   page announces it — because chrome.runtime.id is undefined on a web page and
+   probing a hardcoded id would fingerprint every browser that loads the app.
+   If nothing answers, the extension is not installed on this profile and the UI
+   says so instead of pretending the click worked. */
+export function findExtension(timeoutMs = 800) {
+  return new Promise((resolve) => {
+    const done = (v) => {
+      clearTimeout(t);
+      window.removeEventListener('message', on);
+      resolve(v);
+    };
+    const t = setTimeout(() => done(null), timeoutMs);
+    const on = (e) => {
+      if (e.source !== window || e.data?.type !== 'applyflow:ext') return;
+      done({ id: e.data.id });
+    };
+    window.addEventListener('message', on);
+    window.postMessage({ type: 'applyflow:hand' }, window.location.origin);
+  });
+}
+
+export function handOff(id, { url, onlyEmpty = true, active = true } = {}) {
+  return new Promise((resolve) => {
+    const go = (extId) =>
+      window.chrome.runtime.sendMessage(extId, { type: 'applyflow.ext:handoff', jobId: id, url, onlyEmpty, active }, (res) => {
+        const err = window.chrome?.runtime?.lastError?.message;
+        if (err) return resolve({ ok: false, error: err });
+        resolve(res || { ok: false, error: 'the extension did not answer — reload it at chrome://extensions' });
+      });
+    findExtension().then((ext) => (ext ? go(ext.id) : resolve({ ok: false, error: 'no extension on this page' })));
+  });
+}
+
 export async function copy(text, label = 'Copied to clipboard') {
   try {
     await navigator.clipboard.writeText(text);

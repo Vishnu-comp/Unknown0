@@ -278,6 +278,31 @@
 
   note(`ready on ${location.hostname} · ${engine ? 'shared mapper' : 'fallback mapper'}`, 'dim');
 
+  /* ---------- handoff from the app page (no popup click, no pasted JSON) ----------
+     The app cannot reach this script directly — a page talks to the *worker*, and the
+     worker talks to us. So: tell the page which extension id to talk to, then ask the
+     worker whether this tab has a pack waiting. The worker claims it once, so a reload
+     does not refill over text you already edited, and a stale handoff cannot follow you
+     onto the next site. */
+  try {
+    window.postMessage({ type: 'applyflow:ext', id: chrome.runtime.id }, location.origin);
+  } catch {}
+  document.addEventListener('applyflow:hand', async () => {
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'applyflow:ready' });
+      const claimed = Boolean(r?.ok && r.claimed);
+      if (!claimed) window.postMessage({ type: 'applyflow:ext:ready', claimed: false }, location.origin);
+    } catch {}
+  });
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type !== 'applyflow:fill-handoff') return;
+    const pack = { ...(msg.pack || {}), onlyEmpty: msg.onlyEmpty !== false };
+    runFill(pack, { overwrite: false });
+    try {
+      window.postMessage({ type: 'applyflow:ext:filled', at: Date.now() }, location.origin);
+    } catch {}
+  });
+
   /* optional: fill empty fields as soon as an application-looking page appears */
   setTimeout(async () => {
     let cfg = null;

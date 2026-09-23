@@ -15,7 +15,29 @@ Firefox: `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → p
 `manifest.json` (MV3 works; the `browser.*` shim is enough for this extension —
 if a call errors, `s/this.chrome/browser./` in `content.js`/`popup.js`).
 
-## Use it
+## One click: open the site *and* fill it
+
+Applications → open a pack → **open the site & autofill**. That single button:
+
+1. finds the extension on the current page (the content script announces its id to the
+   app over `postMessage`; there is no hardcoded id to guess),
+2. hands the pack to the extension's service worker over `chrome.runtime.sendMessage`
+   (`externally_connectable` is limited to `localhost`/`127.0.0.1`),
+3. has the worker open the posting in a new tab and, once that tab's content script
+   reports ready, release the pack exactly once into it.
+
+So it fills **empty** fields with the pack, leaves anything you already typed alone, and
+leaves anything you never answered untouched — `work.authorized`, `requires.sponsorship`,
+`background.agree`, `consent.data`, `reason.for.leaving` arrive as `null` and the filler
+skips nulls rather than writing `false` or clearing a checkbox. It never submits, never
+clicks Submit, never uploads without you picking the file.
+
+If nothing answers the handshake, the extension isn't installed on that profile: the
+button copies the payload and opens the page instead, so you can paste it in the popup.
+One claim per handoff means a reload of the form does **not** refill over your edits —
+click the icon and press **Fill this page** to do that deliberately.
+
+## Use it the manual way
 
 1. ApplyFlow → **Applications** → open a pack → **export prefill pack (.json)**
    (whole batch) or **download prefill pack** for a single job.

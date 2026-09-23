@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, toast, copy } from './api.js';
+import { api, toast, copy, handOff, findExtension } from './api.js';
 import { Panel, Ring, Spinner, Chips, fmtMoney, timeAgo, Toggle, Field } from './ui.jsx';
 
 export function AppsTab({ apps, stats, pipeline, refresh, busy, setBusy, meta, openId: openIdProp, submitSupport }) {
@@ -355,6 +355,37 @@ function AppDetail({ a, refresh, busy, setBusy, initialSup }) {
 
         <h4 className="sec">send it</h4>
         <div className="list">
+          {a.url && (
+            <button
+              className="btn sm primary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const ext = await findExtension(600);
+                  if (!ext) {
+                    // Nothing installed to talk to: still do the useful half of the job.
+                    const r = await api.extensionPayload(a.id);
+                    copy(JSON.stringify(r.payload, null, 2), 'no extension on this page — payload copied, apply page opened');
+                    window.open(a.url, '_blank', 'noopener');
+                    return;
+                  }
+                  const res = await handOff(a.id, { url: a.url });
+                  if (!res?.ok) throw new Error(res?.error || 'the extension did not accept the pack');
+                  toast(
+                    `opened ${a.company} with ${res.fields} value(s) queued — empty fields only, nothing submitted`,
+                    'ok',
+                    7000
+                  );
+                } catch (e) {
+                  toast(e.message, 'err', 9000);
+                }
+                setBusy(false);
+              }}
+            >
+              open the site &amp; autofill
+            </button>
+          )}
           {a.url && <a className="btn sm" href={a.url} target="_blank" rel="noreferrer noopener">open apply page ↗</a>}
           {a.applyEmail && (
             <a
