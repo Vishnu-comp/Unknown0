@@ -1,0 +1,74 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 330px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+}
+
+.logo {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+h1 { font-size: 15px; color: #fff; }
+#site-line { font-size: 11px; color: #a5b4fc; margin-top: 2px; }
+
+main { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+button {
+  border: 0; border-radius: 10px; padding: 11px 14px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  background: #334155; color: #f1f5f9;
+}
+button.primary {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff; font-size: 14px; padding: 13px;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, .4);
+}
+button.primary:hover { filter: brightness(1.08); }
+button.primary:disabled { opacity: .6; cursor: default; }
+button.ghost { background: transparent; border: 1px solid #334155; }
+
+.hint { text-align: center; color: #94a3b8; font-size: 11px; }
+kbd {
+  background: #1e293b; border: 1px solid #334155; border-bottom-width: 2px;
+  border-radius: 4px; padding: 1px 5px; font-size: 10px;
+}
+
+.card {
+  background: #1e293b; border-radius: 10px; padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+.row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+.bar { height: 6px; background: #334155; border-radius: 999px; overflow: hidden; }
+#bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, #22c55e, #4ade80); transition: width .3s; }
+
+.toggles label { cursor: pointer; }
+.toggles input { accent-color: #7c3aed; width: 16px; height: 16px; }
+
+.actions { display: flex; gap: 8px; }
+.actions button { flex: 1; }
+
+.status { min-height: 16px; text-align: center; color: #4ade80; font-size: 11px; }
+.status.err { color: #f87171; }
+
+footer {
+  padding: 10px 16px 14px;
+  color: #64748b; font-size: 10px; text-align: center;
+}

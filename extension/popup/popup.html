@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AutoFill Pro</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <div class="logo">⚡</div>
+    <div>
+      <h1>AutoFill Pro</h1>
+      <p id="site-line">Detecting page…</p>
+    </div>
+  </header>
+
+  <main>
+    <button id="fill-btn" class="primary">Auto-Fill This Page</button>
+    <p class="hint">Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></p>
+
+    <div class="card">
+      <div class="row">
+        <span>Profile completeness</span>
+        <strong id="pct">0%</strong>
+      </div>
+      <div class="bar"><div id="bar-fill"></div></div>
+    </div>
+
+    <div class="card toggles">
+      <label class="row">
+        <span>Auto-fill when a form opens</span>
+        <input type="checkbox" id="t-auto" />
+      </label>
+      <label class="row">
+        <span>Show “⚡ Fill” button on pages</span>
+        <input type="checkbox" id="t-widget" />
+      </label>
+      <label class="row">
+        <span>Highlight filled fields</span>
+        <input type="checkbox" id="t-highlight" />
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="edit-btn">Edit My Details</button>
+      <button id="export-btn" class="ghost">Export JSON</button>
+    </div>
+
+    <p id="status" class="status"></p>
+  </main>
+
+  <footer>Everything is stored <strong>locally</strong> on your device.</footer>
+  <script src="../lib/utils.js"></script>
+  <script src="../lib/aliases.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

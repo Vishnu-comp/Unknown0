@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AutoFill Pro - My Details</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <aside>
+    <div class="brand"><span class="logo">⚡</span> AutoFill Pro</div>
+    <nav>
+      <button class="nav-btn active" data-tab="personal">👤 Personal</button>
+      <button class="nav-btn" data-tab="links">🔗 Links</button>
+      <button class="nav-btn" data-tab="work">💼 Work</button>
+      <button class="nav-btn" data-tab="education">🎓 Education</button>
+      <button class="nav-btn" data-tab="extras">📝 Answers &amp; Resume</button>
+      <button class="nav-btn" data-tab="settings">⚙️ Settings &amp; Data</button>
+    </nav>
+    <div class="side-note">All data stays on your device.<br/>Nothing is uploaded anywhere.</div>
+  </aside>
+
+  <main>
+    <header class="page-head">
+      <h1 id="tab-title">Personal details</h1>
+      <div class="head-actions">
+        <span id="save-state"></span>
+        <button id="save-btn" class="primary">Save</button>
+      </div>
+    </header>
+
+    <!-- PERSONAL -->
+    <section id="tab-personal" class="tab active">
+      <div class="grid">
+        <label class="f f-2">Full name<input data-key="fullName" placeholder="Rahul Sharma" /></label>
+        <label class="f">First name<input data-key="firstName" placeholder="Rahul" /></label>
+        <label class="f">Middle name<input data-key="middleName" placeholder="Kumar" /></label>
+        <label class="f">Last name<input data-key="lastName" placeholder="Sharma" /></label>
+        <label class="f">Email<input data-key="email" type="email" placeholder="rahul@example.com" /></label>
+        <label class="f">Alternate email<input data-key="alternateEmail" type="email" /></label>
+        <label class="f">Phone<input data-key="phone" type="tel" placeholder="+91 98765 43210" /></label>
+        <label class="f">Alternate phone<input data-key="alternatePhone" type="tel" /></label>
+        <label class="f">Date of birth<input data-key="dob" type="date" /></label>
+        <label class="f">Gender
+          <select data-key="gender">
+            <option value="">—</option>
+            <option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option>
+          </select>
+        </label>
+        <label class="f">Nationality<input data-key="nationality" placeholder="Indian" /></label>
+        <span></span>
+        <label class="f f-2">Address line 1<input data-key="address1" placeholder="12, MG Road" /></label>
+        <label class="f f-2">Address line 2<input data-key="address2" placeholder="Indiranagar" /></label>
+        <label class="f">City<input data-key="city" placeholder="Bengaluru" /></label>
+        <label class="f">State / Province<input data-key="state" placeholder="Karnataka" /></label>
+        <label class="f">ZIP / Postal code<input data-key="zip" placeholder="560038" /></label>
+        <label class="f">Country<input data-key="country" placeholder="India" /></label>
+      </div>
+    </section>
+
+    <!-- LINKS -->
+    <section id="tab-links" class="tab">
+      <div class="grid">
+        <label class="f f-2">LinkedIn profile URL<input data-key="linkedin" placeholder="https://linkedin.com/in/rahulsharma" /></label>
+        <label class="f f-2">GitHub URL<input data-key="github" placeholder="https://github.com/rahulsharma" /></label>
+        <label class="f f-2">Portfolio / Website<input data-key="portfolio" placeholder="https://rahul.dev" /></label>
+        <label class="f f-2">Twitter / X URL<input data-key="twitter" placeholder="https://x.com/rahul" /></label>
+      </div>
+    </section>
+
+    <!-- WORK -->
+    <section id="tab-work" class="tab">
+      <div class="grid">
+        <label class="f f-2">Current / last company<input data-key="currentCompany" placeholder="Acme Pvt Ltd" /></label>
+        <label class="f f-2">Current / last job title<input data-key="currentTitle" placeholder="Senior Software Engineer" /></label>
+        <label class="f">Total experience (years)<input data-key="yearsExperience" type="number" min="0" max="50" step="0.1" placeholder="4" /></label>
+        <label class="f">Experience (months)<input data-key="monthsExperience" type="number" min="0" max="11" placeholder="6" /></label>
+        <label class="f">Current CTC / Salary<input data-key="currentCTC" placeholder="12 LPA / 85000" /></label>
+        <label class="f">Expected CTC / Salary<input data-key="expectedCTC" placeholder="18 LPA / 120000" /></label>
+        <label class="f">Notice period (days)<input data-key="noticePeriod" placeholder="30" /></label>
+        <label class="f">Work authorization<input data-key="workAuthorization" placeholder="Yes / No / details" /></label>
+        <label class="f">Willing to relocate
+          <select data-key="willingToRelocate">
+            <option value="">—</option>
+            <option>Yes</option><option>No</option>
+          </select>
+        </label>
+        <span></span>
+        <label class="f f-2">Skills (comma separated)<input data-key="skills" placeholder="Java, Spring Boot, SQL, React" /></label>
+        <label class="f f-2">Languages (comma separated)<input data-key="languages" placeholder="English, Hindi, Kannada" /></label>
+        <label class="f f-4">Summary / About you<textarea data-key="summary" rows="4" placeholder="Short intro used for 'Tell us about yourself' questions..."></textarea></label>
+      </div>
+    </section>
+
+    <!-- EDUCATION -->
+    <section id="tab-education" class="tab">
+      <div class="grid">
+        <label class="f f-2">Highest education<input data-key="highestEducation" placeholder="B.Tech / Master's / PhD" /></label>
+        <label class="f f-2">Degree<input data-key="degree" placeholder="Bachelor of Technology" /></label>
+        <label class="f f-2">Major / Specialization<input data-key="major" placeholder="Computer Science" /></label>
+        <label class="f f-2">University / College<input data-key="university" placeholder="VTU / IIT Bombay" /></label>
+        <label class="f">GPA / Percentage<input data-key="gpa" placeholder="8.4 CGPA / 78%" /></label>
+        <label class="f">Graduation year<input data-key="graduationYear" placeholder="2021" /></label>
+      </div>
+    </section>
+
+    <!-- ANSWERS & RESUME -->
+    <section id="tab-extras" class="tab">
+      <h2>Custom answers</h2>
+      <p class="help">For site-specific questions (Google Forms extras, Workday custom questions, “Are you authorized…”, “How did you hear about us” …).
+      If a question contains any keyword, the answer is filled in.</p>
+      <div id="qa-list"></div>
+      <button id="qa-add" class="ghost">+ Add answer</button>
+
+      <h2>Resume</h2>
+      <p class="help">PDF or DOCX, up to ~5 MB. Auto-attached to LinkedIn / Naukri / Workday upload fields.</p>
+      <div class="resume-row">
+        <input type="file" id="resume-input" accept=".pdf,.doc,.docx,application/pdf" />
+        <div id="resume-info" class="muted">No resume stored.</div>
+        <button id="resume-clear" class="ghost">Remove</button>
+      </div>
+    </section>
+
+    <!-- SETTINGS & DATA -->
+    <section id="tab-settings" class="tab">
+      <h2>Behaviour</h2>
+      <div class="switch-list">
+        <label><input type="checkbox" data-setting="autoFillOnLoad" /> Auto-fill as soon as a form page opens</label>
+        <label><input type="checkbox" data-setting="showWidget" /> Show the “⚡ Fill” floating button on pages</label>
+        <label><input type="checkbox" data-setting="highlightFilled" /> Highlight fields after filling</label>
+      </div>
+
+      <h2>Backup</h2>
+      <div class="row-btns">
+        <button id="export-btn">Export profile JSON</button>
+        <label class="file-btn">Import profile JSON<input type="file" id="import-input" accept="application/json,.json" hidden /></label>
+      </div>
+
+      <h2>Matcher tester</h2>
+      <p class="help">Paste any form question or field label to see which profile field AutoFill Pro will use.</p>
+      <div class="tester">
+        <input id="test-label" placeholder='e.g. "Total experience in years"' />
+        <button id="test-btn">Match</button>
+        <div id="test-result" class="muted"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../lib/utils.js"></script>
+  <script src="../lib/aliases.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

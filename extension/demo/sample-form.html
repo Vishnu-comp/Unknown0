@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AutoFill Pro - demo form</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #0f172a; max-width: 720px; margin: 40px auto; padding: 0 20px 80px; }
+    form { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 18px; }
+    h1 { font-size: 22px; } h2 { font-size: 15px; margin-top: 10px; color: #4f46e5; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
+    input, select, textarea { padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 400; }
+    fieldset { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+    fieldset label { flex-direction: row; align-items: center; font-weight: 400; gap: 8px; }
+    .hint { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>AutoFill Pro - demo application form</h1>
+  <p class="hint">Load the extension, fill in your profile, then press <b>⚡ Fill</b> (or <kbd>Alt+Shift+F</kbd>) to auto-fill this page.
+  This is a plain "any website" form - it exercises the generic matcher.</p>
+
+  <form>
+    <h2>Personal</h2>
+    <label>Full name <input name="fullname" /></label>
+    <label>First name <input name="fname" /></label>
+    <label>Last name <input name="lname" /></label>
+    <label>Email address <input name="email" type="email" /></label>
+    <label>Mobile number <input name="mobile" /></label>
+    <label>Date of birth <input name="dob" placeholder="MM/DD/YYYY" /></label>
+    <label>Gender
+      <select name="gender">
+        <option value="">Select</option>
+        <option>Male</option><option>Female</option><option>Other</option>
+      </select>
+    </label>
+
+    <h2>Address</h2>
+    <label>Address line 1 <input name="addr1" /></label>
+    <label>Address line 2 <input name="addr2" /></label>
+    <label>City <input name="city" /></label>
+    <label>State <input name="state" /></label>
+    <label>Pin code <input name="pin" /></label>
+    <label>Country <input name="country" /></label>
+
+    <h2>Work</h2>
+    <label>Current company <input name="company" /></label>
+    <label>Job title <input name="title" /></label>
+    <label>Total experience in years <input name="expYears" type="number" /></label>
+    <label>Current CTC <input name="ctc" /></label>
+    <label>Expected CTC <input name="ectc" /></label>
+    <label>Notice period (days) <input name="notice" /></label>
+    <label>Key skills <input name="skills" /></label>
+    <fieldset>
+      <legend>Are you legally authorized to work?</legend>
+      <label><input type="radio" name="workauth" value="Yes" /> Yes</label>
+      <label><input type="radio" name="workauth" value="No" /> No</label>
+    </fieldset>
+    <fieldset>
+      <legend>Willing to relocate?</legend>
+      <label><input type="radio" name="relocate" value="Yes" /> Yes</label>
+      <label><input type="radio" name="relocate" value="No" /> No</label>
+    </fieldset>
+
+    <h2>Links & extras</h2>
+    <label>LinkedIn profile <input name="linkedin" /></label>
+    <label>GitHub URL <input name="github" /></label>
+    <label>Tell us about yourself <textarea name="about" rows="3"></textarea></label>
+    <label>How did you hear about us? <input name="source" /></label>
+  </form>
+</body>
+</html>
