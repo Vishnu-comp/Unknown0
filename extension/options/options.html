@@ -21,14 +21,24 @@
 
   <main>
     <div id="first-run" class="banner warn" hidden>
-      <b>👋 One-time setup:</b> the gray <b>“e.g. …”</b> text is only an example — type <b>your real details</b> on this
-      page and press <b>Save</b>. AutoFill Pro then writes these details into forms on Google Forms, LinkedIn, Naukri,
-      Workday and any other website. If nothing is saved here, there is nothing to fill.
+      <h3>⚡ Fastest setup: give me your resume</h3>
+      Upload your resume (PDF or TXT) — I will <b>auto-fill this entire form</b> from it and then ask you
+      <b>only</b> for the few things a resume never contains (date of birth, notice period, expected CTC…).
+      <div class="resume-cta">
+        <label class="file-btn">📄 Upload resume &amp; auto-fill<input type="file" id="resume-quick" accept=".pdf,.txt,.md,.doc,.docx" hidden /></label>
+        <span class="muted">…or type manually below — the gray “e.g. …” text is only an example.</span>
+      </div>
     </div>
+
+    <div id="missing-card" class="banner warn" hidden>
+      <h3 id="missing-title">Just a few details your resume can't know</h3>
+      <div id="missing-quick" class="quick-grid"></div>
+    </div>
+
     <div id="saved-banner" class="banner ok" hidden>
-      <b>✅ Profile saved.</b> Now open the form you want filled (a normal website — not this settings page) and press
-      <b>⚡ Fill</b> (or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>). You can also enable “auto-fill when a form opens” under
-      <b>Settings &amp; Data</b>.
+      <b>✅ Profile saved.</b> Review the auto-filled fields (highlighted in green), then open the form you want filled
+      (a normal website — not this settings page) and press <b>⚡ Fill</b> (or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>).
+      You can enable “auto-fill when a form opens” under <b>Settings &amp; Data</b>.
     </div>
 
     <header class="page-head">
@@ -116,19 +126,20 @@
 
     <!-- ANSWERS & RESUME -->
     <section id="tab-extras" class="tab">
+      <h2>Resume</h2>
+      <p class="help">PDF or TXT (up to ~6 MB). The resume is stored locally (auto-attached to LinkedIn / Naukri / Workday
+      upload fields) <b>and used to auto-fill this whole form</b> — you'll only be asked for what a resume can't know.</p>
+      <div class="resume-row">
+        <input type="file" id="resume-input" accept=".pdf,.txt,.md,.doc,.docx,application/pdf" />
+        <div id="resume-info" class="muted">No resume stored.</div>
+        <button id="resume-clear" class="ghost">Remove</button>
+      </div>
+
       <h2>Custom answers</h2>
       <p class="help">For site-specific questions (Google Forms extras, Workday custom questions, “Are you authorized…”, “How did you hear about us” …).
       If a question contains any keyword, the answer is filled in.</p>
       <div id="qa-list"></div>
       <button id="qa-add" class="ghost">+ Add answer</button>
-
-      <h2>Resume</h2>
-      <p class="help">PDF or DOCX, up to ~5 MB. Auto-attached to LinkedIn / Naukri / Workday upload fields.</p>
-      <div class="resume-row">
-        <input type="file" id="resume-input" accept=".pdf,.doc,.docx,application/pdf" />
-        <div id="resume-info" class="muted">No resume stored.</div>
-        <button id="resume-clear" class="ghost">Remove</button>
-      </div>
     </section>
 
     <!-- SETTINGS & DATA -->
@@ -158,6 +169,8 @@
 
   <script src="../lib/utils.js"></script>
   <script src="../lib/aliases.js"></script>
+  <script src="../lib/resume.js"></script>
+  <script type="module" src="../lib/pdf-text.mjs"></script>
   <script src="options.js"></script>
 </body>
 </html>

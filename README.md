@@ -21,16 +21,18 @@ Everything is stored **locally** in `chrome.storage` — no servers, no tracking
 2. Open **`chrome://extensions`** (Edge: `edge://extensions`).
 3. Turn on **Developer mode** (top right).
 4. Click **Load unpacked** and select the **`extension/`** folder inside this repo.
-5. The options page opens automatically — **type your real details** and press **Save**.
+5. The options page opens automatically — **upload your resume** (PDF/TXT) and the whole form
+   auto-fills from it; then answer the few questions a resume can't know (date of birth,
+   notice period, expected CTC…) and press **Save**. You can also type everything manually.
 
 > ⚠️ **First run:** the gray “e.g. …” text in the fields is just an example placeholder —
-> it is **not** saved data. Fill in *your* name/email/phone etc. once and press **Save**;
-> until then the extension has nothing to fill (the popup shows “Profile completeness 0%”).
+> it is **not** saved data. Fastest path: **upload your resume** and the profile fills itself.
+> Until something is saved the extension has nothing to fill (popup shows “Profile completeness 0%”).
 > Also note the extension cannot run on its own settings tab or on `chrome://` pages —
 > use it on a normal website with a form.
 
-> Tip: upload your resume (PDF/DOCX ≤ 6 MB) in the "Answers & Resume" tab —
-> it is stored locally and auto-attached on LinkedIn / Naukri / Workday upload fields.
+> Tip: the uploaded resume (PDF/DOCX ≤ 6 MB) is also auto-attached on LinkedIn / Naukri / Workday
+> upload fields during filling.
 
 ## Use it
 
@@ -69,26 +71,32 @@ extension/
 ├── lib/
 │   ├── utils.js           # React-safe value setter, labels, dates, option matching
 │   ├── aliases.js         # profile schema + question→field matcher (pure logic)
-│   └── engine.js          # generic fill engine (inputs, selects, radios, files)
+│   ├── engine.js          # generic fill engine (inputs, selects, radios, files)
+│   ├── resume.js          # resume text -> profile parser (pure logic)
+│   └── pdf-text.mjs       # PDF -> text via vendored pdf.js
 ├── adapters/
 │   ├── google-forms.js    # question-card aware filler
 │   ├── linkedin.js        # Easy Apply + typeaheads + resume
 │   ├── naukri.js          # profile/apply forms + exp selects
 │   └── workday.js         # automation-ids + Workday dropdowns
 ├── popup/                 # quick-fill popup + settings
-├── options/               # full profile editor, resume, custom Q&A, matcher tester
-└── tests/matcher.test.js  # matcher unit tests (plain Node)
+├── options/               # profile editor + resume auto-import + custom Q&A + matcher tester
+├── vendor/                # pdf.js (Apache-2.0, see PDFJS-LICENSE)
+├── demo/sample-form.html  # safe local test form
+└── tests/                 # matcher + resume unit tests, JSDOM smoke test
 ```
 
 Run the tests:
 
 ```bash
-node extension/tests/matcher.test.js
+node extension/tests/matcher.test.js     # matcher unit tests (no deps)
+node extension/tests/resume.test.js      # resume parser tests (no deps)
+npm i jsdom && node extension/tests/engine.smoke.js   # optional: JSDOM integration test
 ```
 
 ## Roadmap
 
-- Parse a resume PDF to pre-fill the profile automatically.
+- Parse a DOCX resume too (PDF and TXT already auto-import).
 - Fillable repeatable Workday/LinkedIn experience & education sections ("Add another").
 - Firefox build (mostly compatible already).
 - Profiles per site / per role.
@@ -96,5 +104,6 @@ node extension/tests/matcher.test.js
 ## Privacy
 
 All data (profile, custom answers, resume) lives in `chrome.storage.local` on your
-device. The extension makes **zero network requests**. Export / delete your data any
+device. Resume parsing happens **entirely in your browser** (bundled pdf.js) - the
+extension makes **zero network requests**. Export / delete your data any
 time from the "Settings & data" tab.

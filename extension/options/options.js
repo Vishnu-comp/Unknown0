@@ -1,4 +1,5 @@
-/* AutoFill Pro - options page logic */
+/* AutoFill Pro - options page logic (profile editor, resume auto-import,
+   missing-details quick questions, custom answers, backup, matcher tester) */
 'use strict';
 
 var $ = function (id) { return document.getElementById(id); };
@@ -11,6 +12,19 @@ var TITLES = {
   extras: 'Custom answers & resume',
   settings: 'Settings & data'
 };
+
+/* The few details a resume can never contain -> asked one-liner style. */
+var QUICK_META = {
+  dob: { label: 'Date of birth', type: 'date' },
+  gender: { label: 'Gender', type: 'select', options: ['Male', 'Female', 'Other', 'Prefer not to say'] },
+  currentCTC: { label: 'Current salary / CTC', type: 'text', ph: 'e.g. 12 LPA' },
+  expectedCTC: { label: 'Expected salary / CTC', type: 'text', ph: 'e.g. 18 LPA' },
+  noticePeriod: { label: 'Notice period (days)', type: 'text', ph: 'e.g. 30' },
+  workAuthorization: { label: 'Work authorization', type: 'text', ph: 'e.g. Yes' },
+  willingToRelocate: { label: 'Willing to relocate', type: 'select', options: ['Yes', 'No'] }
+};
+
+// ---------------------------------------------------------------- storage
 
 function collectForm() {
   var profile = {};
@@ -71,25 +85,21 @@ function say(text, ok) {
   var el = $('save-state');
   el.textContent = text;
   el.style.color = ok === false ? '#dc2626' : '#16a34a';
-  if (text) setTimeout(function () { el.textContent = ''; }, 2500);
+  if (text && ok !== false) setTimeout(function () { el.textContent = ''; }, 4000);
 }
 
-/** First-run guidance: nothing saved yet -> warn banner; saved -> "go fill a form". */
 function updateBanners(profile) {
   var hasData = !!(profile && String(profile.fullName || profile.firstName || profile.email || profile.phone || '').trim());
   $('first-run').hidden = hasData;
   $('saved-banner').hidden = !hasData;
+  if (!hasData) $('missing-card').hidden = true;
 }
 
-function fileToBase64(file) {
-  return new Promise(function (resolve, reject) {
-    var reader = new FileReader();
-    reader.onload = function () {
-      var data = String(reader.result).split(',')[1] || '';
-      resolve({ name: file.name, type: file.type || 'application/pdf', dataBase64: data });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+function load() {
+  return new Promise(function (resolve) {
+    chrome.storage.local.get(['afx_profile_v1'], function (res) {
+      resolve(res.afx_profile_v1 || null);
+    });
   });
 }
 
@@ -104,18 +114,135 @@ async function save() {
   });
   await chrome.storage.local.set({ afx_profile_v1: profile });
   updateBanners(profile);
-  say('Saved ✓');
+  return profile;
 }
 
-function load() {
-  return new Promise(function (resolve) {
-    chrome.storage.local.get(['afx_profile_v1'], function (res) {
-      resolve(res.afx_profile_v1 || null);
-    });
+function fileToBase64(file) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data = String(reader.result).split(',')[1] || '';
+      resolve({ name: file.name, type: file.type || 'application/pdf', dataBase64: data });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 }
 
-// ---------- tabs ----------
+// ------------------------------------------------------ resume auto-import
+
+/** Fill only EMPTY form fields from the parsed resume; never overwrite typing. */
+function mergeParsed(parsed) {
+  var merged = [];
+  Object.keys(parsed.profile).forEach(function (key) {
+    var v = String(parsed.profile[key] || '').trim();
+    if (!v) return;
+    var el = document.querySelector('[data-key="' + key + '"]');
+    if (el && !String(el.value).trim()) {
+      el.value = v;
+      merged.push(key);
+      el.classList.add('just-filled');
+      setTimeout(function () { el.classList.remove('just-filled'); }, 3500);
+    }
+  });
+  return merged;
+}
+
+/** Ask only for the fields a resume cannot know (dob, notice, expected CTC…). */
+function renderMissing(missing) {
+  var wrap = $('missing-quick');
+  wrap.innerHTML = '';
+  var still = (missing || []).filter(function (m) {
+    var el = document.querySelector('[data-key="' + m.key + '"]');
+    return !el || !String(el.value).trim();
+  });
+  if (!still.length) {
+    $('missing-card').hidden = true;
+    return;
+  }
+  still.forEach(function (m) {
+    var meta = QUICK_META[m.key] || { label: m.label, type: 'text' };
+    var label = document.createElement('label');
+    label.className = 'quick';
+    label.appendChild(document.createTextNode(meta.label));
+    var input;
+    if (meta.options) {
+      input = document.createElement('select');
+      input.innerHTML = '<option value="">—</option>' + meta.options.map(function (o) {
+        return '<option>' + o + '</option>';
+      }).join('');
+    } else {
+      input = document.createElement('input');
+      input.type = meta.type || 'text';
+      if (meta.ph) input.placeholder = meta.ph;
+    }
+    input.setAttribute('data-quick', m.key);
+    function sync() {
+      var main = document.querySelector('[data-key="' + m.key + '"]');
+      if (main) main.value = input.value;
+      input.classList.toggle('done', !!input.value);
+    }
+    input.addEventListener('input', sync);
+    input.addEventListener('change', sync);
+    label.appendChild(input);
+    wrap.appendChild(label);
+  });
+  $('missing-title').textContent = 'Just ' + still.length + ' detail' + (still.length === 1 ? '' : 's') + ' your resume can’t know';
+  $('missing-card').hidden = false;
+}
+
+async function handleResumeFile(file, inputEl) {
+  if (!file) return;
+  if (file.size > 6 * 1024 * 1024) {
+    say('Resume too large (max 6 MB).', false);
+    inputEl.value = '';
+    return;
+  }
+  say('Reading resume…');
+  var stored = await fileToBase64(file);
+
+  // 1) extract text (PDF via pdf.js, TXT directly; DOCX/PNG kept for upload only)
+  var text = '';
+  try {
+    if (/\.pdf$/i.test(file.name)) {
+      if (window.AFXExtractPdfText) {
+        text = await window.AFXExtractPdfText(file);
+      } else {
+        say('PDF engine is still loading — try again in a second.', false);
+        return;
+      }
+    } else if (/\.(txt|md)$/i.test(file.name)) {
+      text = await file.text();
+    }
+  } catch (e) {
+    say('Could not read the PDF (' + (e && e.message || e) + '). Is it a real PDF?', false);
+    return;
+  }
+
+  // 2) parse into profile fields (filename is a weak fallback for name/role)
+  var parsed = (window.AFX && AFX.resume) ? AFX.resume.parse(text, file.name) : { profile: {}, filledKeys: [], missing: [] };
+  var merged = mergeParsed(parsed);
+
+  // 3) store the resume itself (for auto-attach on job portals)
+  var existing = await load() || {};
+  existing.resume = stored;
+  await chrome.storage.local.set({ afx_profile_v1: existing });
+
+  // 4) save the merged fields, then ask only what is missing
+  await save();
+  renderResume(await load());
+  renderMissing(parsed.missing);
+  if (merged.length) {
+    say('Auto-filled ' + merged.length + ' field' + (merged.length === 1 ? '' : 's') + ' from ' + file.name + ' ✓ — answer the questions above, then Save.');
+  } else {
+    say('Resume stored ✓ (no new fields to fill — everything was already set).');
+  }
+  updateBanners(await load());
+  if (inputEl) inputEl.value = '';
+}
+
+// ---------------------------------------------------------------- actions
+
 document.querySelectorAll('.nav-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
     document.querySelectorAll('.nav-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -127,26 +254,14 @@ document.querySelectorAll('.nav-btn').forEach(function (btn) {
   });
 });
 
-// ---------- actions ----------
-$('save-btn').addEventListener('click', save);
+$('save-btn').addEventListener('click', async function () {
+  await save();
+  say('Saved ✓');
+});
 $('qa-add').addEventListener('click', function () { addQaRow('', ''); });
 
-$('resume-input').addEventListener('change', async function () {
-  var file = this.files && this.files[0];
-  if (!file) return;
-  if (file.size > 6 * 1024 * 1024) {
-    say('Resume too large (max 6 MB).', false);
-    this.value = '';
-    return;
-  }
-  var resume = await fileToBase64(file);
-  var profile = await load() || collectForm();
-  profile.resume = resume;
-  profile.customAnswers = collectQa();
-  await chrome.storage.local.set({ afx_profile_v1: profile });
-  renderResume(profile);
-  say('Resume stored ✓');
-});
+$('resume-quick').addEventListener('change', function () { handleResumeFile(this.files[0], this); });
+$('resume-input').addEventListener('change', function () { handleResumeFile(this.files[0], this); });
 
 $('resume-clear').addEventListener('click', async function () {
   var profile = await load() || {};
@@ -177,6 +292,8 @@ $('import-input').addEventListener('change', async function () {
     fillForm(profile);
     (profile.customAnswers || []).forEach(function (r) { addQaRow(r.keywords, r.answer); });
     renderResume(profile);
+    updateBanners(profile);
+    renderMissing(profile.customAnswers ? [] : (window.AFX ? AFX.resume.parse('', '').missing : []));
     say('Imported ✓');
   } catch (e) {
     say('Invalid JSON file.', false);
@@ -184,7 +301,8 @@ $('import-input').addEventListener('change', async function () {
   this.value = '';
 });
 
-// ---------- matcher tester ----------
+// ------------------------------------------------------------ matcher test
+
 function runTest() {
   var label = $('test-label').value;
   var out = $('test-result');
@@ -209,7 +327,8 @@ $('test-label').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') runTest();
 });
 
-// ---------- boot ----------
+// -------------------------------------------------------------------- boot
+
 (async function init() {
   var profile = await load();
   updateBanners(profile);
@@ -225,7 +344,7 @@ $('test-label').addEventListener('keydown', function (e) {
     renderResume(null);
   }
 
-  // autosave shortly after edits
+  // autosave shortly after edits (typing in main or quick fields)
   var t = null;
   document.addEventListener('input', function () {
     clearTimeout(t);

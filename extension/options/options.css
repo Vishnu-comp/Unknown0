@@ -136,3 +136,23 @@ button.danger { background: #fee2e2; color: #b91c1c; }
 #test-result { width: 100%; padding: 10px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; }
 #test-result.ok { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
 #test-result.none { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+
+/* ---------- resume auto-import ---------- */
+.banner h3 { font-size: 14px; margin-bottom: 6px; }
+.resume-cta { margin-top: 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.quick-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.quick { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 600; color: #92400e; }
+.quick input, .quick select {
+  border: 1px solid #fcd34d; border-radius: 8px; padding: 8px 10px;
+  font-size: 13px; font-weight: 400; background: #fff;
+}
+.quick input:focus, .quick select:focus { outline: 2px solid #f59e0b; border-color: transparent; }
+.quick input.done, .quick select.done { border-color: #4ade80; background: #f0fdf4; }
+.just-filled {
+  background: #ecfdf5 !important;
+  outline: 2px solid #22c55e !important;
+  transition: outline .3s;
+}
