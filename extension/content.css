@@ -1,0 +1,33 @@
+#applyflow-panel {
+  position: fixed; right: 14px; bottom: 14px; z-index: 2147483647;
+  width: 320px; max-height: 40vh; overflow: hidden; display: flex; flex-direction: column;
+  background: rgba(13, 19, 23, 0.96); color: #e6eef2; border: 1px solid rgba(45, 63, 74, 0.9);
+  border-radius: 12px; box-shadow: 0 18px 44px -20px rgba(0, 0, 0, 0.9);
+  font: 12px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+#applyflow-panel.min { max-height: 34px; }
+#applyflow-panel.min #applyflow-log { display: none; }
+#applyflow-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid rgba(34, 48, 56, 0.9); background: rgba(19, 26, 32, 0.95); }
+#applyflow-head b { color: #34d399; letter-spacing: -0.01em; }
+#applyflow-count { flex: 1; color: #8ea3ae; font-size: 11px; }
+#applyflow-toggle { appearance: none; border: 1px solid rgba(45,63,74,.9); background: rgba(23,32,39,.9); color: #8ea3ae; border-radius: 6px; width: 22px; height: 20px; cursor: pointer; line-height: 1; }
+#applyflow-log { padding: 7px 10px; overflow: auto; }
+.af-row { padding: 3px 0; border-bottom: 1px solid rgba(34, 48, 56, 0.5); color: #8ea3ae; }
+.af-row:last-child { border-bottom: none; }
+.af-row span { opacity: 0.55; margin-right: 5px; font-variant-numeric: tabular-nums; }
+.af-fill { color: #6ee7b7; }
+.af-warn { color: #fbbf24; }
+.af-dim { color: #64748b; }
+.af-info { color: #7dd3fc; }
+.af-ok { color: #e6eef2; }
+
+/* the "I came here myself" card: one line, bottom-left, never over a form field */
+#applyflow-site { position: fixed; left: 12px; bottom: 12px; z-index: 2147483646;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 46vw;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: #e6eef2;
+  background: rgba(11,18,26,.95); border: 1px solid #22323f; border-radius: 10px;
+  padding: 7px 9px; box-shadow: 0 8px 26px rgba(0,0,0,.45); }
+#applyflow-site button { font: inherit; cursor: pointer; color: #0b1218; background: #34d399;
+  border: 0; border-radius: 6px; padding: 3px 7px; }
+#applyflow-site button.af-ghost { color: #cfe3ee; background: transparent; border: 1px solid #2c3f4e; }
+#applyflow-site .af-warn { color: #fbbf24; } #applyflow-site .af-dim { color: #8aa2b4; }
