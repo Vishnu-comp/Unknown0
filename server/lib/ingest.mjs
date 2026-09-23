@@ -149,7 +149,19 @@ function base(job) {
    not as today's market. It is the one source reachable from most restricted
    networks, because it only needs api.github.com. */
 async function githubArchive() {
-  const raw = await getJson('https://api.github.com/repos/odmo/github-jobs/contents/jobs.json');
+  let raw = null;
+  try {
+    raw = await getJson('https://api.github.com/repos/odmo/github-jobs/contents/jobs.json');
+  } catch (e) {
+    if (/HTTP 404/.test(String(e?.message || ''))) {
+      throw new Error(
+        'github_archive: the corpus this reads (github.com/odmo/github-jobs) is no longer published — 404 from a working network. ' +
+        'It is off by default for that reason; re-point this URL at a live dump, or use a key-less board instead ' +
+        '(Settings → Job sources → Greenhouse, add slugs like gitlab, datadog, postman).'
+      );
+    }
+    throw e;
+  }
     const json = JSON.parse(Buffer.from(raw.content, raw.encoding || 'base64').toString('utf8'));
   const list = Array.isArray(json) ? json : json.jobs || [];
   return list

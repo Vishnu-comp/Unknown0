@@ -399,6 +399,15 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
     'the UI can actually clear an invented profile instead of leaving that to curl');
 }
 
+/* A default that is enabled but can never answer is its own kind of fiction. */
+{
+  const db = fs.readFileSync('server/lib/db.mjs', 'utf8');
+  const ing = fs.readFileSync('server/lib/ingest.mjs', 'utf8');
+  const def = db.slice(db.indexOf('sources: { githubArchive'), db.indexOf('sources: { githubArchive') + 40);
+  ok(/githubArchive: false/.test(def), `the shipped default does not enable a dead source (${def.trim().slice(0, 34)})`);
+  ok(/no longer published/.test(ing), 'a 404 from the archived corpus says so instead of failing like a network problem');
+}
+
 /* The CLI ingest tool is where a fabricated default hurts most, because it runs
    unattended in a shell and its output goes straight into the store. Source-grepped,
    same style as the route-shape checks in test:harvest: a test that re-walks the

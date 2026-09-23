@@ -136,7 +136,13 @@ export function getSettings() {
     {
       autoApply: { enabled: false, minScore: 70, dailyCap: 10, perSourcePerDay: 4, cooldownHours: 24, mode: 'assist' },
       llm: { provider: 'none', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-      sources: { githubArchive: true, adzuna: false, jooble: false, greenhouseBoards: [], leverCompanies: [] },
+      /* githubArchive is OFF by default: it reads the archived GitHub Jobs corpus from
+         `odmo/github-jobs`, and that repo no longer exists (api.github.com returns 404 for
+         the repo, its data dir and the file, verified from a network that reaches GitHub
+         fine). Shipping it on meant every fresh install's first fetch failed on a source
+         that can never answer — exactly the "looks healthy, is fiction" pattern this app
+         keeps having to root out. Enable it if you repoint the URL at a live dump. */
+      sources: { githubArchive: false, adzuna: false, jooble: false, greenhouseBoards: [], leverCompanies: [] },
       notificationEmail: '',
       atsSubmit: { enabled: false, requireResumeFile: true, note: 'Only public Greenhouse/Lever apply APIs. LinkedIn/Indeed/Workday are excluded by design.' },
     }
