@@ -287,11 +287,19 @@
   try {
     window.postMessage({ type: 'applyflow:ext', id: chrome.runtime.id }, location.origin);
   } catch {}
-  document.addEventListener('applyflow:hand', async () => {
+  /* The app asks "are you there?" with window.postMessage, which is a `message` event on
+     window — not a custom DOM event, and not visible on document. (Listening on document
+     is a silent dead end: no error, just a handshake that never returns.) */
+  window.addEventListener('message', async (e) => {
+    if (e.source !== window || e.data?.type !== 'applyflow:hand') return;
+    let claimed = false;
     try {
       const r = await chrome.runtime.sendMessage({ type: 'applyflow:ready' });
-      const claimed = Boolean(r?.ok && r.claimed);
-      if (!claimed) window.postMessage({ type: 'applyflow:ext:ready', claimed: false }, location.origin);
+      claimed = Boolean(r?.ok && r.claimed);
+    } catch {}
+    try {
+      // answer either way: the app distinguishes "no extension" from "extension, nothing queued"
+      window.postMessage({ type: 'applyflow:ext', id: chrome.runtime.id, claimed }, location.origin);
     } catch {}
   });
   chrome.runtime.onMessage.addListener((msg) => {

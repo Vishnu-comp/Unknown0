@@ -500,12 +500,63 @@ ok(appNoInsights.tailoredResume.length > 300, 'tailoring still runs when insight
     ok(c1.ok && c1.claimed && calls.sent.some(([id, t]) => id === 7 && t === 'applyflow:fill-handoff'), 'the tab claims its pack and receives the fill message');
     const c2 = (await deliver({ type: 'applyflow:ready' }));
     ok(!c2.ok && /nothing pending/.test(c2.error || ''), 'a reload claims nothing — your edits are never overwritten by a second fill');
+    /* And the page that asked still learns the extension is alive: findExtension() resolves,
+       it must not fall through to "not installed" just because the queue was empty. */
+    const announced = await new Promise((resolve) => {
+      const win = {
+        location: { origin: 'http://localhost:3000' },
+        chrome: { runtime: { id: 'ext-test', sendMessage: (m) => Promise.resolve(m?.type === 'applyflow:ready' ? c2 : { ok: true }) } },
+        postMessage: (m) => resolve(m),
+      };
+      win.addEventListener = (_type, fn) => fn({ source: win, data: { type: 'applyflow:hand' } });
+      const listener = fs
+        .readFileSync('extension/content.js', 'utf8')
+        .match(/window\.addEventListener\('message', async \(e\) => \{[\s\S]*?\n  \}\);/);
+      ok(Boolean(listener), 'the content script answers the handshake on window "message", not a DOM event');
+      const sandbox = {
+        window: win,
+        document: { addEventListener: () => {} },
+        chrome: win.chrome,
+        location: win.location,
+        Promise,
+        Object,
+        Boolean,
+        String,
+        console,
+      };
+      sandbox.globalThis = sandbox;
+      if (listener) vm.runInContext(`(async () => { ${listener[0]} })()`, vm.createContext(sandbox));
+    });
+    ok(announced?.type === 'applyflow:ext' && announced.id === 'ext-test' && announced.claimed === false,
+      'the handshake answers with the extension id plus "nothing queued" (so the UI can tell the two apart)');
     const other = (await deliver({ type: 'applyflow:ready' }, { tab: { id: 99 } }));
     ok(!other.ok, 'a different tab cannot pick up someone else’s pack');
     const boot = (await deliver({ type: 'applyflow:boot-config' }, {}));
     await new Promise((r) => setTimeout(r, 20));
     ok(boot === undefined || boot === null || boot.ok === true,
       'the popup flow still gets its boot-config answer through the same dispatcher');
+
+    /* --- the other side of the contract: what the *page* sends ---------------------
+       Every token above matched; the click still did nothing for two reasons a
+       token check cannot see — the handshake was posted as a window message while
+       the content script listened for a custom DOM event, and handOff() named the
+       pack without ever fetching it. So pin the client's shape, not its vocabulary. */
+    const api = fs.readFileSync('client/api.js', 'utf8');
+    const hand = api.slice(api.indexOf('export async function handOff'));
+    const msg = hand.slice(hand.indexOf("type: 'applyflow.ext:handoff'"));
+    ok(hand.includes('await api.extensionPayload(id)'),
+      'handOff() fetches the real pack from the server before handing anything over');
+    ok(msg.includes('payload') && msg.includes('url') && msg.includes('onlyEmpty'),
+      'the handoff message carries payload + url + onlyEmpty, as the worker destructures them');
+    ok(hand.includes('payload?.fields') && hand.includes('no prefill pack'),
+      'a pack-less application is refused with a reason instead of opening an empty page');
+    ok(bg.includes('msg.payload?.payload') && bg.includes('if (!pack?.fields)'),
+      'the worker reads the same key the client writes, and refuses a pack with no fields');
+    ok(bg.includes('applyflow.ext:ping') && bg.includes("name: 'ApplyFlow'"),
+      'the worker answers a ping, so "extension not installed" is a fact and not a guess');
+    const find = api.slice(api.indexOf('export function findExtension'), api.indexOf('export async function handOff'));
+    ok(find.includes("addEventListener('message'") && find.includes('applyflow:hand'),
+      'the app page probes with a window message on its own origin');
   }
 }
 

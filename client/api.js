@@ -114,15 +114,26 @@ export function findExtension(timeoutMs = 800) {
   });
 }
 
-export function handOff(id, { url, onlyEmpty = true, active = true } = {}) {
+export async function handOff(id, { url, onlyEmpty = true, active = true } = {}) {
+  const ext = await findExtension();
+  if (!ext) return { ok: false, error: 'no extension on this page' };
+  /* The worker cannot read our API, so the pack travels with the message — this is the
+     exact object the popup's Fill uses (fields + checkboxes + onlyEmpty), which is why
+     nothing new can be invented in transit. */
+  const { payload } = await api.extensionPayload(id);
+  if (!payload?.fields || !Object.keys(payload.fields).length) {
+    return { ok: false, error: 'this application has no prefill pack — draft it first' };
+  }
   return new Promise((resolve) => {
-    const go = (extId) =>
-      window.chrome.runtime.sendMessage(extId, { type: 'applyflow.ext:handoff', jobId: id, url, onlyEmpty, active }, (res) => {
+    window.chrome.runtime.sendMessage(
+      ext.id,
+      { type: 'applyflow.ext:handoff', jobId: id, payload, url, onlyEmpty, active },
+      (res) => {
         const err = window.chrome?.runtime?.lastError?.message;
         if (err) return resolve({ ok: false, error: err });
         resolve(res || { ok: false, error: 'the extension did not answer — reload it at chrome://extensions' });
-      });
-    findExtension().then((ext) => (ext ? go(ext.id) : resolve({ ok: false, error: 'no extension on this page' })));
+      }
+    );
   });
 }
 
