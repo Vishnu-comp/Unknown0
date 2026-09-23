@@ -56,19 +56,24 @@ async function init() {
     try {
       chrome.tabs.sendMessage(tab.id, { type: 'AFX_DETECT' }, function (resp) {
         if (chrome.runtime.lastError || !resp) {
-          $('site-line').textContent = 'Not active on this page (try a normal website)';
+          $('site-line').textContent = 'Open a normal website with a form — this page (settings / browser page) cannot be filled';
           return;
         }
         $('site-line').textContent = 'Supported here: ' + resp.site + ' · ' + resp.fields + ' fillable fields';
       });
     } catch (e) {
-      $('site-line').textContent = 'Not active on this page';
+      $('site-line').textContent = 'Open a normal website with a form to use AutoFill';
     }
+  }
+
+  if (!profile || !(profile.fullName || profile.firstName || profile.email)) {
+    setStatus('Step 1 of 2: open “Edit My Details”, type YOUR details, press Save', false);
+    $('fill-btn').textContent = 'Set Up My Details First…';
   }
 
   $('fill-btn').addEventListener('click', async function () {
     if (!profile || !(profile.fullName || profile.firstName || profile.email)) {
-      setStatus('Set up your details first…', true);
+      setStatus('Nothing is saved yet - gray “e.g.” text is just an example. Type your real details and Save.', true);
       chrome.runtime.openOptionsPage();
       return;
     }
@@ -79,7 +84,7 @@ async function init() {
     chrome.tabs.sendMessage(tab.id, { type: 'AFX_FILL' }, function (stats) {
       $('fill-btn').disabled = false;
       if (chrome.runtime.lastError) {
-        setStatus('Cannot run on this page.', true);
+        setStatus('Cannot fill this page. Open the actual form on a normal website (e.g. a Google Form or job application), then press Fill.', true);
         return;
       }
       if (!stats) {

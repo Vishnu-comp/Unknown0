@@ -21,7 +21,13 @@ Everything is stored **locally** in `chrome.storage` — no servers, no tracking
 2. Open **`chrome://extensions`** (Edge: `edge://extensions`).
 3. Turn on **Developer mode** (top right).
 4. Click **Load unpacked** and select the **`extension/`** folder inside this repo.
-5. The options page opens automatically — fill in your details and press **Save**.
+5. The options page opens automatically — **type your real details** and press **Save**.
+
+> ⚠️ **First run:** the gray “e.g. …” text in the fields is just an example placeholder —
+> it is **not** saved data. Fill in *your* name/email/phone etc. once and press **Save**;
+> until then the extension has nothing to fill (the popup shows “Profile completeness 0%”).
+> Also note the extension cannot run on its own settings tab or on `chrome://` pages —
+> use it on a normal website with a form.
 
 > Tip: upload your resume (PDF/DOCX ≤ 6 MB) in the "Answers & Resume" tab —
 > it is stored locally and auto-attached on LinkedIn / Naukri / Workday upload fields.

@@ -74,6 +74,13 @@ function say(text, ok) {
   if (text) setTimeout(function () { el.textContent = ''; }, 2500);
 }
 
+/** First-run guidance: nothing saved yet -> warn banner; saved -> "go fill a form". */
+function updateBanners(profile) {
+  var hasData = !!(profile && String(profile.fullName || profile.firstName || profile.email || profile.phone || '').trim());
+  $('first-run').hidden = hasData;
+  $('saved-banner').hidden = !hasData;
+}
+
 function fileToBase64(file) {
   return new Promise(function (resolve, reject) {
     var reader = new FileReader();
@@ -96,6 +103,7 @@ async function save() {
     profile.settings[el.getAttribute('data-setting')] = el.checked;
   });
   await chrome.storage.local.set({ afx_profile_v1: profile });
+  updateBanners(profile);
   say('Saved ✓');
 }
 
@@ -204,6 +212,7 @@ $('test-label').addEventListener('keydown', function (e) {
 // ---------- boot ----------
 (async function init() {
   var profile = await load();
+  updateBanners(profile);
   if (profile) {
     fillForm(profile);
     (profile.customAnswers || []).forEach(function (r) { addQaRow(r.keywords, r.answer); });
