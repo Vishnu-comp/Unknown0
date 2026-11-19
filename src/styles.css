@@ -145,3 +145,11 @@ footer{overflow:hidden}
 .evh .tml{font-family:'Baloo Chettan 2',sans-serif;font-size:clamp(1.8rem,6vw,2.6rem);line-height:1.1}
 .evh .ten{font-size:.8rem;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);margin-top:4px}
 .evh::after{content:'';width:90px;height:3px;margin-top:10px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+
+.grid{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:14px;max-width:1100px;margin:0 auto;padding:0 14px}
+@media(min-width:800px){.grid{gap:20px}}
+.grid .cell,.grid .cell:nth-child(3n+2){margin:0;min-width:0}
+.grid .cell{flex-shrink:1}
+.grid .tilt img{width:100%;height:auto;aspect-ratio:auto;display:block}
+.videos{margin-top:56px}
+.vgrid{max-width:1000px;margin:0 auto;padding:0 14px}
