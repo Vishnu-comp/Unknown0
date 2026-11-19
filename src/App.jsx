@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import hero from '../img/hero.svg'
 import frieze from '../img/frieze.svg'
 import ganesha from '../img/ganesha.svg'
 import lotus from '../img/lotus.svg'
 import vineL from '../img/vine-l.svg'
 import vineR from '../img/vine-r.svg'
+import v1p from '../img/v1-poster.svg'
+import v2p from '../img/v2-poster.svg'
+import v3p from '../img/v3-poster.svg'
 import p1 from '../img/dsc02030.svg'
 import p2 from '../img/dsc07413.svg'
 import p3 from '../img/dsc03377.svg'
@@ -28,6 +31,102 @@ const photos = [
   { src: p9, alt: 'Family and friends on the stage' },
   { src: p10, alt: 'Three posing in front of the flower stage' },
 ]
+
+
+function useScrollY() {
+  const [y, setY] = useState(0)
+  useEffect(() => {
+    let raf = 0
+    const on = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => setY(window.scrollY))
+    }
+    on()
+    window.addEventListener('scroll', on, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', on)
+      cancelAnimationFrame(raf)
+    }
+  }, [])
+  return y
+}
+
+function Progress() {
+  const y = useScrollY()
+  const max = typeof document === 'undefined' ? 1 : Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
+  return <div className="progress" style={{ transform: `scaleX(${Math.min(1, y / max)})` }} />
+}
+
+function Petals() {
+  const petals = useMemo(
+    () =>
+      Array.from({ length: 22 }, (_, i) => ({
+        id: i,
+        left: Math.round((i * 47) % 100),
+        size: 10 + ((i * 7) % 14),
+        dur: 11 + ((i * 5) % 9),
+        delay: -((i * 3) % 14),
+        drift: ((i % 2 ? 1 : -1) * (30 + ((i * 11) % 60))),
+      })),
+    []
+  )
+  return (
+    <div className="petals" aria-hidden="true">
+      {petals.map((p) => (
+        <span
+          key={p.id}
+          style={{
+            left: p.left + '%',
+            width: p.size,
+            height: p.size * 1.3,
+            animationDuration: p.dur + 's',
+            animationDelay: p.delay + 's',
+            '--drift': p.drift + 'px',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function Letters({ text }) {
+  return (
+    <span className="letters" aria-label={text}>
+      {Array.from(text).map((ch, i) => (
+        <span key={i} aria-hidden="true" style={{ '--i': i }}>
+          {ch === ' ' ? '\u00a0' : ch}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function Tilt({ children, className = '', ...rest }) {
+  const ref = useRef(null)
+  const move = (e) => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const x = (e.clientX - r.left) / r.width - 0.5
+    const y = (e.clientY - r.top) / r.height - 0.5
+    el.style.setProperty('--rx', (-y * 10).toFixed(2) + 'deg')
+    el.style.setProperty('--ry', (x * 12).toFixed(2) + 'deg')
+    el.style.setProperty('--gx', (x + 0.5) * 100 + '%')
+    el.style.setProperty('--gy', (y + 0.5) * 100 + '%')
+  }
+  const leave = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.setProperty('--rx', '0deg')
+    el.style.setProperty('--ry', '0deg')
+  }
+  return (
+    <figure ref={ref} className={`tilt ${className}`} onMouseMove={move} onMouseLeave={leave} {...rest}>
+      {children}
+      <span className="shine" />
+    </figure>
+  )
+}
 
 function Reveal({ as: Tag = 'div', className = '', children, ...rest }) {
   const ref = useRef(null)
@@ -58,18 +157,22 @@ function Reveal({ as: Tag = 'div', className = '', children, ...rest }) {
 }
 
 function Hero() {
+  const y = useScrollY()
   return (
     <header className="hero">
-      <img className="hero-art" src={hero} alt="Guruvayoor temple with the couple walking hand in hand" />
+      <div className="hero-frame" style={{ transform: `translateY(${y * 0.25}px) scale(${1 + Math.min(y, 600) * 0.0002})` }}>
+        <img className="hero-art" src={hero} alt="Guruvayoor temple with the couple walking hand in hand" />
+      </div>
       <div className="hero-fade" />
-      <Reveal className="hero-names">
+      <div className="hero-names" style={{ transform: `translateY(${y * -0.08}px)` }}>
         <h1 className="ml-names">
-          അമൃത <span className="amp">&amp;</span>
+          <Letters text="അമൃത" /> <span className="amp">&amp;</span>
           <br />
-          നിതിൻ കൃഷ്ണ
+          <Letters text="നിതിൻ കൃഷ്ണ" />
         </h1>
         <p className="datebar">25 October 2026 &middot; 1202 Thulam 8</p>
-      </Reveal>
+        <span className="scroll-hint" aria-hidden="true">scroll</span>
+      </div>
     </header>
   )
 }
@@ -80,11 +183,11 @@ function Intro() {
       <img className="vine vine-l" src={vineL} alt="" />
       <img className="vine vine-r" src={vineR} alt="" />
       <Reveal className="inner">
-        <img className="ganesha" src={ganesha} alt="Ganesha emblem" />
+        <img className="ganesha float" src={ganesha} alt="Ganesha emblem" />
         <h2 className="script">Amrutha</h2>
         <p className="with">with</p>
         <h2 className="script">Nithin Krishna</h2>
-        <img className="lotus mid" src={lotus} alt="" />
+        <img className="lotus mid glow" src={lotus} alt="" />
         <p className="hosts">
           <strong>Sunday 25th October 2026 (1202 Thulam 8)</strong>
           <br />
@@ -96,33 +199,165 @@ function Intro() {
 }
 
 function Band() {
+  const ref = useRef(null)
+  const y = useScrollY()
+  const [off, setOff] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setOff((r.top + r.height / 2 - window.innerHeight / 2) * -0.25)
+  }, [y])
   return (
-    <section className="band" style={{ backgroundImage: `url(${p1})` }} aria-label="Photo of the couple walking together" />
+    <section ref={ref} className="band" aria-label="Photo of the couple walking together">
+      <img src={p1} alt="" style={{ transform: `translateY(${off}px) scale(1.25)` }} />
+      <Reveal as="p" className="band-quote">ഓർമ്മകൾ</Reveal>
+    </section>
+  )
+}
+
+const clips = [
+  { id: 'v1', parts: 3, poster: v1p, label: 'Dancing together' },
+  { id: 'v2', parts: 2, poster: v2p, label: 'The celebration' },
+  { id: 'v3', parts: 3, poster: v3p, label: 'Joy on the lawn' },
+]
+
+// Clips are stored as base64 text chunks (the repo only accepts text files), rebuilt into a Blob in the browser.
+async function loadClip(id, parts) {
+  const base = import.meta.env.BASE_URL
+  const texts = await Promise.all(
+    Array.from({ length: parts }, (_, i) => fetch(`${base}vid/${id}-${i}.txt`).then((r) => r.text()))
+  )
+  const bin = atob(texts.join(''))
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return URL.createObjectURL(new Blob([bytes], { type: 'video/mp4' }))
+}
+
+function VideoTile({ clip }) {
+  const wrap = useRef(null)
+  const vid = useRef(null)
+  const [src, setSrc] = useState(null)
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => {
+    const el = wrap.current
+    let started = false
+    let url = null
+    const io = new IntersectionObserver(
+      ([e]) => {
+        const v = vid.current
+        if (e.isIntersecting && !started) {
+          started = true
+          loadClip(clip.id, clip.parts).then((u) => {
+            url = u
+            setSrc(u)
+          })
+        }
+        if (v) {
+          if (e.isIntersecting) v.play().catch(() => {})
+          else v.pause()
+        }
+      },
+      { threshold: 0.35, rootMargin: '200px 0px' }
+    )
+    io.observe(el)
+    return () => {
+      io.disconnect()
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [clip])
+  const toggle = () => {
+    const v = vid.current
+    if (!v) return
+    if (v.paused) v.play().catch(() => {})
+    else v.pause()
+  }
+  return (
+    <Reveal className="vcell">
+      <Tilt className={`vtile ${playing ? 'is-playing' : ''}`} onClick={toggle}>
+        <div ref={wrap} className="vbox">
+          <img className="vposter" src={clip.poster} alt="" />
+          {src && (
+            <video
+              ref={vid}
+              src={src}
+              muted
+              loop
+              playsInline
+              autoPlay
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              aria-label={clip.label}
+            />
+          )}
+          <span className="vlabel">{clip.label}</span>
+          <span className="vbadge" aria-hidden="true">{playing ? 'tap to pause' : 'tap to play'}</span>
+        </div>
+      </Tilt>
+    </Reveal>
+  )
+}
+
+function Videos() {
+  return (
+    <section className="videos">
+      <Reveal as="h2" className="ml">
+        ചലിക്കുന്ന ഓർമ്മകൾ <small>Moving memories</small>
+      </Reveal>
+      <div className="vgrid">
+        {clips.map((c) => (
+          <VideoTile key={c.id} clip={c} />
+        ))}
+      </div>
+    </section>
   )
 }
 
 function Gallery() {
   const [open, setOpen] = useState(null)
+  const close = useCallback(() => setOpen(null), [])
+  const step = useCallback((d) => setOpen((i) => (i === null ? i : (i + d + photos.length) % photos.length)), [])
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && setOpen(null)
+    const onKey = (e) => {
+      if (e.key === 'Escape') close()
+      if (e.key === 'ArrowRight') step(1)
+      if (e.key === 'ArrowLeft') step(-1)
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [close, step])
+  useEffect(() => {
+    document.body.style.overflow = open === null ? '' : 'hidden'
+  }, [open])
+  const touch = useRef(0)
   return (
     <section className="gallery">
       <Reveal as="h2" className="ml">
         ഓർമ്മകൾ <small>Memories</small>
       </Reveal>
       <div className="grid">
-        {photos.map((p) => (
-          <Reveal as="figure" key={p.src} onClick={() => setOpen(p)}>
-            <img loading="lazy" src={p.src} alt={p.alt} />
+        {photos.map((p, i) => (
+          <Reveal key={p.src} className="cell" style={{ transitionDelay: (i % 3) * 120 + 'ms' }}>
+            <Tilt onClick={() => setOpen(i)}>
+              <img loading="lazy" src={p.src} alt={p.alt} />
+            </Tilt>
           </Reveal>
         ))}
       </div>
-      {open && (
-        <div className="lb" onClick={() => setOpen(null)}>
-          <img src={open.src} alt={open.alt} />
+      {open !== null && (
+        <div
+          className="lb"
+          onClick={close}
+          onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - touch.current
+            if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1)
+          }}
+        >
+          <button className="nav prev" aria-label="Previous photo" onClick={(e) => { e.stopPropagation(); step(-1) }}>&#8249;</button>
+          <img key={open} src={photos[open].src} alt={photos[open].alt} onClick={(e) => e.stopPropagation()} />
+          <button className="nav next" aria-label="Next photo" onClick={(e) => { e.stopPropagation(); step(1) }}>&#8250;</button>
+          <span className="count">{open + 1} / {photos.length}</span>
         </div>
       )}
     </section>
@@ -132,14 +367,20 @@ function Gallery() {
 export default function App() {
   return (
     <>
+      <Progress />
+      <Petals />
       <Hero />
       <main>
         <Intro />
         <Band />
         <Gallery />
+        <Videos />
       </main>
       <footer>
-        <img className="frieze" src={frieze} alt="Line drawing of a wedding procession" />
+        <div className="frieze-wrap">
+          <img className="frieze" src={frieze} alt="Line drawing of a wedding procession" />
+          <img className="frieze" src={frieze} alt="" aria-hidden="true" />
+        </div>
         <p>Amrutha &amp; Nithin Krishna &middot; Guruvayoor &middot; 25 October 2026</p>
       </footer>
     </>
