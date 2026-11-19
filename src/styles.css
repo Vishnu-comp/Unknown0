@@ -139,3 +139,9 @@ footer{overflow:hidden}
 @media(min-width:700px){.sdgrid{grid-template-columns:1fr 1fr;align-items:start}}
 .sdcell{width:100%;max-width:380px}
 .sdcell img{width:100%;display:block;border-radius:14px}
+
+.evsec{margin:48px 0 20px}
+.evh{display:flex;flex-direction:column;align-items:center;margin:0 0 22px;color:var(--red);position:relative}
+.evh .tml{font-family:'Baloo Chettan 2',sans-serif;font-size:clamp(1.8rem,6vw,2.6rem);line-height:1.1}
+.evh .ten{font-size:.8rem;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);margin-top:4px}
+.evh::after{content:'';width:90px;height:3px;margin-top:10px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
