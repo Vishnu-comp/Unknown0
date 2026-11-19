@@ -71,38 +71,6 @@ function Progress() {
   return <div className="progress" style={{ transform: `scaleX(${Math.min(1, y / max)})` }} />
 }
 
-function Petals() {
-  const petals = useMemo(
-    () =>
-      Array.from({ length: 22 }, (_, i) => ({
-        id: i,
-        left: Math.round((i * 47) % 100),
-        size: 10 + ((i * 7) % 14),
-        dur: 11 + ((i * 5) % 9),
-        delay: -((i * 3) % 14),
-        drift: ((i % 2 ? 1 : -1) * (30 + ((i * 11) % 60))),
-      })),
-    []
-  )
-  return (
-    <div className="petals" aria-hidden="true">
-      {petals.map((p) => (
-        <span
-          key={p.id}
-          style={{
-            left: p.left + '%',
-            width: p.size,
-            height: p.size * 1.3,
-            animationDuration: p.dur + 's',
-            animationDelay: p.delay + 's',
-            '--drift': p.drift + 'px',
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
 function Letters({ text }) {
   // Split by grapheme cluster so Malayalam conjuncts stay intact; fall back to whole words.
   const parts =
@@ -182,6 +150,7 @@ function Hero() {
       <div className="hero-frame" style={{ transform: `translateY(${y * 0.25}px) scale(${1 + Math.min(y, 600) * 0.0002})` }}>
         <img className="hero-art" src={hero} alt="Guruvayoor temple with the couple walking hand in hand" />
       </div>
+      <Sparkles />
       <div className="hero-fade" />
       <div className="hero-names" style={{ transform: `translateY(${y * -0.08}px)` }}>
         <h1 className="ml-names">
@@ -319,7 +288,7 @@ function VideoTile({ clip }) {
 
 function Videos({ list }) {
   return (
-    <section className="videos">
+    <section className="videos" id="videos">
       <h3 className="vh">Moving memories</h3>
       <div className="vgrid">
         {list.map((c) => (
@@ -330,12 +299,118 @@ function Videos({ list }) {
   )
 }
 
+
+function Ornament() {
+  return (
+    <svg className="orn" viewBox="0 0 220 24" aria-hidden="true">
+      <path d="M0 12H84M136 12H220" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M110 2c5 5 5 15 0 20c-5-5-5-15 0-20z M110 12c6-8 16-8 22-4c-6 8-16 8-22 4z M110 12c-6-8-16-8-22-4c6 8 16 8 22 4z" fill="currentColor" />
+      <circle cx="76" cy="12" r="2.5" fill="currentColor" />
+      <circle cx="144" cy="12" r="2.5" fill="currentColor" />
+    </svg>
+  )
+}
+
+function SectionHead({ ml, en, n, count, small }) {
+  return (
+    <Reveal as="div" className="shead">
+      <span className="wm" aria-hidden="true">{n}</span>
+      <h3 className={small ? 'sdh' : 'evh'}>
+        <span className="tml">{ml}</span>
+        <span className="ten">{en}</span>
+      </h3>
+      <Ornament />
+      <p className="cnt">{count}</p>
+    </Reveal>
+  )
+}
+
+function Sparkles() {
+  const dots = useMemo(
+    () => Array.from({ length: 16 }, (_, i) => ({ l: (i * 37 + 7) % 100, t: (i * 53 + 11) % 70, s: 4 + ((i * 3) % 7), d: (i * 0.45) % 5 })),
+    []
+  )
+  return (
+    <div className="sparkles" aria-hidden="true">
+      {dots.map((d, i) => (
+        <i key={i} style={{ left: d.l + '%', top: d.t + '%', width: d.s, height: d.s, animationDelay: d.d + 's' }} />
+      ))}
+    </div>
+  )
+}
+
+function Count({ to }) {
+  const ref = useRef(null)
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return
+      io.disconnect()
+      const t0 = performance.now()
+      const tick = (t) => {
+        const k = Math.min(1, (t - t0) / 1400)
+        setV(Math.round(to * (1 - Math.pow(1 - k, 3))))
+        if (k < 1) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [to])
+  return <b ref={ref}>{v}</b>
+}
+
+function Stats({ items }) {
+  return (
+    <Reveal className="stats">
+      {items.map((it) => (
+        <div key={it.label} className="stat">
+          <Count to={it.n} />
+          <span>{it.label}</span>
+        </div>
+      ))}
+    </Reveal>
+  )
+}
+
+const NAV = [
+  { id: 'savedate', label: 'Save the date' },
+  { id: 'rangoli', label: 'Rangoli night' },
+  { id: 'wedding', label: 'Wedding' },
+  { id: 'reception', label: 'Reception' },
+  { id: 'videos', label: 'Videos' },
+]
+
+function Nav() {
+  const y = useScrollY()
+  const [on, setOn] = useState('')
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (es) => es.forEach((e) => e.isIntersecting && setOn(e.target.id)),
+      { rootMargin: '-35% 0px -55% 0px' }
+    )
+    NAV.forEach((n) => {
+      const el = document.getElementById(n.id)
+      if (el) io.observe(el)
+    })
+    return () => io.disconnect()
+  }, [])
+  return (
+    <nav className={`sitenav ${y > 500 ? 'show' : ''}`} aria-label="Sections">
+      {NAV.map((n) => (
+        <a key={n.id} href={'#' + n.id} className={on === n.id ? 'on' : ''}>{n.label}</a>
+      ))}
+    </nav>
+  )
+}
+
 function Cell({ p, i, onOpen }) {
   const [ar, setAr] = useState(0.75)
   return (
     <Reveal
       className="cell"
-      style={{ transitionDelay: (i % 3) * 120 + 'ms', flexGrow: ar * 100, flexBasis: ar * 230 + 'px', maxWidth: ar * 560 + 'px' }}
+      style={{ '--k': i % 7, '--dir': i % 2 ? 1 : -1, transitionDelay: (i % 3) * 120 + 'ms', flexGrow: ar * 100, flexBasis: ar * 230 + 'px', maxWidth: ar * 560 + 'px' }}
     >
       <Tilt onClick={onOpen}>
         <img
@@ -386,6 +461,12 @@ function Gallery({ photos }) {
           <button className="nav prev" aria-label="Previous photo" onClick={(e) => { e.stopPropagation(); step(-1) }}>&#8249;</button>
           <img key={open} src={photos[open].src} alt={photos[open].alt} onClick={(e) => e.stopPropagation()} />
           <button className="nav next" aria-label="Next photo" onClick={(e) => { e.stopPropagation(); step(1) }}>&#8250;</button>
+          <button className="close" aria-label="Close" onClick={(e) => { e.stopPropagation(); close() }}>&times;</button>
+          <div className="thumbs" onClick={(e) => e.stopPropagation()}>
+            {photos.map((p, i) => (
+              <img key={i} src={p.src} alt="" className={i === open ? 'on' : ''} onClick={() => setOpen(i)} />
+            ))}
+          </div>
           <span className="count">{open + 1} / {photos.length}</span>
         </div>
       )}
@@ -400,23 +481,28 @@ const EVENTS = [
 ]
 
 function Events() {
+  const sd = [sd1, p2, ...sdExtra].map((src) => ({ src, alt: 'Amrutha and Nithin, save the date' }))
   return (
     <section className="events">
       <Reveal as="h2" className="ml">
         ഓർമ്മകൾ <small>Memories</small>
       </Reveal>
-      <div className="savedate">
-        <Reveal as="h3" className="sdh">Save the date</Reveal>
-        <Gallery photos={[sd1, p2, ...sdExtra].map((src) => ({ src, alt: 'Amrutha and Nithin, save the date' }))} />
+      <Stats
+        items={[
+          { n: sd.length + photos.length, label: 'Photos' },
+          { n: clips.length, label: 'Videos' },
+          { n: 4, label: 'Celebrations' },
+        ]}
+      />
+      <div className="savedate evsec" id="savedate">
+        <SectionHead ml="സേവ് ദി ഡേറ്റ്" en="Save the date" n="01" count={sd.length + ' photos'} small />
+        <Gallery photos={sd} />
       </div>
-      {EVENTS.map((e) => {
+      {EVENTS.map((e, k) => {
         const ps = photos.filter((p) => p.ev === e.id)
         return (
           <div key={e.id} className="evsec" id={e.id}>
-            <Reveal as="h3" className="evh">
-              <span className="tml">{e.ml}</span>
-              <span className="ten">{e.en}</span>
-            </Reveal>
+            <SectionHead ml={e.ml} en={e.en} n={'0' + (k + 2)} count={ps.length + ' photos'} />
             <Gallery photos={ps} />
           </div>
         )
@@ -430,6 +516,7 @@ export default function App() {
   return (
     <>
       <Progress />
+      <Nav />
       <Hero />
       <main>
         <Intro />
