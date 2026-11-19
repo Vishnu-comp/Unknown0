@@ -17,6 +17,7 @@ import p6 from '../img/dsc04860.svg'
 import p7 from '../img/dsc04815.svg'
 import p8 from '../img/dsc09813.svg'
 import p9 from '../img/dsc05575.svg'
+import sd1 from '../img/save-date.svg'
 
 const photos = [
   { ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
@@ -377,11 +378,18 @@ function Events() {
       <Reveal as="h2" className="ml">
         ഓർമ്മകൾ <small>Memories</small>
       </Reveal>
-      <Reveal className="featured">
-        <Tilt>
-          <img src={p2} alt="Amrutha and Nithin on a stone courtyard" />
-        </Tilt>
-      </Reveal>
+      <div className="savedate">
+        <Reveal as="h3" className="sdh">Save the date</Reveal>
+        <div className="sdgrid">
+          {[sd1, p2].map((src, i) => (
+            <Reveal key={i} className="sdcell" style={{ transitionDelay: i * 150 + 'ms' }}>
+              <Tilt>
+                <img src={src} alt="Amrutha and Nithin, save the date" />
+              </Tilt>
+            </Reveal>
+          ))}
+        </div>
+      </div>
       <div className="tabs" role="tablist">
         {EVENTS.map((e) => (
           <button key={e.id} role="tab" aria-selected={tab === e.id} className={tab === e.id ? 'on' : ''} onClick={() => setTab(e.id)}>
