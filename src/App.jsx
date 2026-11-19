@@ -315,6 +315,25 @@ function Videos({ list }) {
   )
 }
 
+function Cell({ p, i, onOpen }) {
+  const [ar, setAr] = useState(0.75)
+  return (
+    <Reveal
+      className="cell"
+      style={{ transitionDelay: (i % 3) * 120 + 'ms', flexGrow: ar * 100, flexBasis: ar * 230 + 'px', maxWidth: ar * 560 + 'px' }}
+    >
+      <Tilt onClick={onOpen}>
+        <img
+          loading="lazy"
+          src={p.src}
+          alt={p.alt}
+          onLoad={(e) => e.currentTarget.naturalHeight && setAr(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+        />
+      </Tilt>
+    </Reveal>
+  )
+}
+
 function Gallery({ photos }) {
   const [open, setOpen] = useState(null)
   const close = useCallback(() => setOpen(null), [])
@@ -336,11 +355,7 @@ function Gallery({ photos }) {
     <section className="gallery">
       <div className="grid">
         {photos.map((p, i) => (
-          <Reveal key={p.src} className="cell" style={{ transitionDelay: (i % 3) * 120 + 'ms' }}>
-            <Tilt onClick={() => setOpen(i)}>
-              <img loading="lazy" src={p.src} alt={p.alt} />
-            </Tilt>
-          </Reveal>
+          <Cell key={p.src} p={p} i={i} onOpen={() => setOpen(i)} />
         ))}
       </div>
       {open !== null && (
@@ -389,7 +404,6 @@ function Events() {
       </div>
       {EVENTS.map((e) => {
         const ps = photos.filter((p) => p.ev === e.id)
-        const cs = clips.filter((c) => c.ev === e.id)
         return (
           <div key={e.id} className="evsec" id={e.id}>
             <Reveal as="h3" className="evh">
@@ -397,10 +411,10 @@ function Events() {
               <span className="ten">{e.en}</span>
             </Reveal>
             <Gallery photos={ps} />
-            {cs.length > 0 && <Videos list={cs} />}
           </div>
         )
       })}
+      <Videos list={clips} />
     </section>
   )
 }
