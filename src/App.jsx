@@ -430,7 +430,6 @@ export default function App() {
   return (
     <>
       <Progress />
-      <Petals />
       <Hero />
       <main>
         <Intro />
