@@ -90,9 +90,14 @@ function Petals() {
 }
 
 function Letters({ text }) {
+  // Split by grapheme cluster so Malayalam conjuncts stay intact; fall back to whole words.
+  const parts =
+    typeof Intl !== 'undefined' && Intl.Segmenter
+      ? Array.from(new Intl.Segmenter('ml', { granularity: 'grapheme' }).segment(text), (x) => x.segment)
+      : text.split(/(\s+)/)
   return (
     <span className="letters" aria-label={text}>
-      {Array.from(text).map((ch, i) => (
+      {parts.map((ch, i) => (
         <span key={i} aria-hidden="true" style={{ '--i': i }}>
           {ch === ' ' ? '\u00a0' : ch}
         </span>
