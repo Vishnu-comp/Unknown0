@@ -17,7 +17,6 @@ import p6 from '../img/dsc04860.svg'
 import p7 from '../img/dsc04815.svg'
 import p8 from '../img/dsc09813.svg'
 import p9 from '../img/dsc05575.svg'
-import p10 from '../img/dsc05348.svg'
 
 const photos = [
   { src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
@@ -29,7 +28,6 @@ const photos = [
   { src: p7, alt: 'Couple in formal wear in a garden' },
   { src: p8, alt: 'Couple laughing together at a celebration' },
   { src: p9, alt: 'Family and friends on the stage' },
-  { src: p10, alt: 'Three posing in front of the flower stage' },
 ]
 
 
