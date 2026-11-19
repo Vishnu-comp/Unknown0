@@ -214,7 +214,7 @@ function Band() {
   }, [y])
   return (
     <section ref={ref} className="band" aria-label="Photo of the couple walking together">
-      <img src={p1} alt="" style={{ transform: `translateY(${off}px) scale(1.25)` }} />
+      <img src={p1} alt="" style={{ transform: `translateY(${off * 0.3}px)` }} />
       <Reveal as="p" className="band-quote">ഓർമ്മകൾ</Reveal>
     </section>
   )
