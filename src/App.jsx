@@ -17,8 +17,21 @@ import p6 from '../img/dsc04860.svg'
 import p7 from '../img/dsc04815.svg'
 import p8 from '../img/dsc09813.svg'
 import p9 from '../img/dsc05575.svg'
+import r2 from '../img/rangoli2.svg'
+import rg0 from './data/rg0.js'
+import rg1 from './data/rg1.js'
+import rg2 from './data/rg2.js'
+import rg3 from './data/rg3.js'
+import sdd0 from './data/sd0.js'
+import sdd1 from './data/sd1.js'
+import sdd2 from './data/sd2.js'
+import sdd3 from './data/sd3.js'
+import sdd4 from './data/sd4.js'
+import sdd5 from './data/sd5.js'
 import sd1 from '../img/save-date.svg'
 
+const rangoliExtra = [...rg0, ...rg1, ...rg2, ...rg3].map((src) => ({ ev: 'rangoli', src, alt: 'Rangoli night' }))
+const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
 const photos = [
   { ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
   { ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
@@ -27,8 +40,10 @@ const photos = [
   { ev: 'wedding', src: p5, alt: 'Close portrait with garlands' },
   { ev: 'reception', src: p6, alt: 'Couple outside a white house' },
   { ev: 'reception', src: p7, alt: 'Couple in formal wear in a garden' },
+  { ev: 'rangoli', src: r2, alt: 'Family together before the marigold backdrop' },
   { ev: 'rangoli', src: p8, alt: 'Couple laughing together at a celebration' },
   { ev: 'reception', src: p9, alt: 'Family and friends on the stage' },
+  ...rangoliExtra,
 ]
 
 
@@ -392,15 +407,7 @@ function Events() {
       </Reveal>
       <div className="savedate">
         <Reveal as="h3" className="sdh">Save the date</Reveal>
-        <div className="sdgrid">
-          {[sd1, p2].map((src, i) => (
-            <Reveal key={i} className="sdcell" style={{ transitionDelay: i * 150 + 'ms' }}>
-              <Tilt>
-                <img src={src} alt="Amrutha and Nithin, save the date" />
-              </Tilt>
-            </Reveal>
-          ))}
-        </div>
+        <Gallery photos={[sd1, p2, ...sdExtra].map((src) => ({ src, alt: 'Amrutha and Nithin, save the date' }))} />
       </div>
       {EVENTS.map((e) => {
         const ps = photos.filter((p) => p.ev === e.id)
