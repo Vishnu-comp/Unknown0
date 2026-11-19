@@ -20,7 +20,7 @@ import p9 from '../img/dsc05575.svg'
 
 const photos = [
   { ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
-  { ev: 'wedding', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
+  { ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
   { ev: 'wedding', src: p3, alt: 'The couple seated before the lamp' },
   { ev: 'wedding', src: p4, alt: 'Family on stage around the lamp' },
   { ev: 'wedding', src: p5, alt: 'Close portrait with garlands' },
@@ -376,6 +376,11 @@ function Events() {
     <section className="events">
       <Reveal as="h2" className="ml">
         ഓർമ്മകൾ <small>Memories</small>
+      </Reveal>
+      <Reveal className="featured">
+        <Tilt>
+          <img src={p2} alt="Amrutha and Nithin on a stone courtyard" />
+        </Tilt>
       </Reveal>
       <div className="tabs" role="tablist">
         {EVENTS.map((e) => (
