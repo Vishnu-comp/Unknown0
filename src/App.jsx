@@ -19,15 +19,15 @@ import p8 from '../img/dsc09813.svg'
 import p9 from '../img/dsc05575.svg'
 
 const photos = [
-  { src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
-  { src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
-  { src: p3, alt: 'The couple seated before the lamp' },
-  { src: p4, alt: 'Family on stage around the lamp' },
-  { src: p5, alt: 'Close portrait with garlands' },
-  { src: p6, alt: 'Couple outside a white house' },
-  { src: p7, alt: 'Couple in formal wear in a garden' },
-  { src: p8, alt: 'Couple laughing together at a celebration' },
-  { src: p9, alt: 'Family and friends on the stage' },
+  { ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
+  { ev: 'wedding', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
+  { ev: 'wedding', src: p3, alt: 'The couple seated before the lamp' },
+  { ev: 'wedding', src: p4, alt: 'Family on stage around the lamp' },
+  { ev: 'wedding', src: p5, alt: 'Close portrait with garlands' },
+  { ev: 'reception', src: p6, alt: 'Couple outside a white house' },
+  { ev: 'reception', src: p7, alt: 'Couple in formal wear in a garden' },
+  { ev: 'rangoli', src: p8, alt: 'Couple laughing together at a celebration' },
+  { ev: 'reception', src: p9, alt: 'Family and friends on the stage' },
 ]
 
 
@@ -220,9 +220,9 @@ function Band() {
 }
 
 const clips = [
-  { id: 'v1', parts: 3, poster: v1p, label: 'Dancing together' },
-  { id: 'v2', parts: 2, poster: v2p, label: 'The celebration' },
-  { id: 'v3', parts: 3, poster: v3p, label: 'Joy on the lawn' },
+  { ev: 'reception', id: 'v1', parts: 3, poster: v1p, label: 'Dancing together' },
+  { ev: 'wedding', id: 'v2', parts: 2, poster: v2p, label: 'The celebration' },
+  { ev: 'rangoli', id: 'v3', parts: 3, poster: v3p, label: 'Joy on the lawn' },
 ]
 
 // Clips are stored as base64 text chunks (the repo only accepts text files), rebuilt into a Blob in the browser.
@@ -301,14 +301,12 @@ function VideoTile({ clip }) {
   )
 }
 
-function Videos() {
+function Videos({ list }) {
   return (
     <section className="videos">
-      <Reveal as="h2" className="ml">
-        ചലിക്കുന്ന ഓർമ്മകൾ <small>Moving memories</small>
-      </Reveal>
+      <h3 className="vh">Moving memories</h3>
       <div className="vgrid">
-        {clips.map((c) => (
+        {list.map((c) => (
           <VideoTile key={c.id} clip={c} />
         ))}
       </div>
@@ -316,7 +314,7 @@ function Videos() {
   )
 }
 
-function Gallery() {
+function Gallery({ photos }) {
   const [open, setOpen] = useState(null)
   const close = useCallback(() => setOpen(null), [])
   const step = useCallback((d) => setOpen((i) => (i === null ? i : (i + d + photos.length) % photos.length)), [])
@@ -335,9 +333,6 @@ function Gallery() {
   const touch = useRef(0)
   return (
     <section className="gallery">
-      <Reveal as="h2" className="ml">
-        ഓർമ്മകൾ <small>Memories</small>
-      </Reveal>
       <div className="grid">
         {photos.map((p, i) => (
           <Reveal key={p.src} className="cell" style={{ transitionDelay: (i % 3) * 120 + 'ms' }}>
@@ -367,6 +362,37 @@ function Gallery() {
   )
 }
 
+const EVENTS = [
+  { id: 'rangoli', ml: 'രംഗോലി നൈറ്റ്', en: 'Rangoli Night' },
+  { id: 'wedding', ml: 'വിവാഹം', en: 'Wedding' },
+  { id: 'reception', ml: 'റിസപ്ഷൻ', en: 'Reception' },
+]
+
+function Events() {
+  const [tab, setTab] = useState('rangoli')
+  const ps = photos.filter((p) => p.ev === tab)
+  const cs = clips.filter((c) => c.ev === tab)
+  return (
+    <section className="events">
+      <Reveal as="h2" className="ml">
+        ഓർമ്മകൾ <small>Memories</small>
+      </Reveal>
+      <div className="tabs" role="tablist">
+        {EVENTS.map((e) => (
+          <button key={e.id} role="tab" aria-selected={tab === e.id} className={tab === e.id ? 'on' : ''} onClick={() => setTab(e.id)}>
+            <span className="tml">{e.ml}</span>
+            <span className="ten">{e.en}</span>
+          </button>
+        ))}
+      </div>
+      <div key={tab} className="pane">
+        <Gallery photos={ps} />
+        {cs.length > 0 && <Videos list={cs} />}
+      </div>
+    </section>
+  )
+}
+
 export default function App() {
   return (
     <>
@@ -376,8 +402,7 @@ export default function App() {
       <main>
         <Intro />
         <Band />
-        <Gallery />
-        <Videos />
+        <Events />
       </main>
       <footer>
         <div className="frieze-wrap">
