@@ -370,9 +370,6 @@ const EVENTS = [
 ]
 
 function Events() {
-  const [tab, setTab] = useState('rangoli')
-  const ps = photos.filter((p) => p.ev === tab)
-  const cs = clips.filter((c) => c.ev === tab)
   return (
     <section className="events">
       <Reveal as="h2" className="ml">
@@ -390,18 +387,20 @@ function Events() {
           ))}
         </div>
       </div>
-      <div className="tabs" role="tablist">
-        {EVENTS.map((e) => (
-          <button key={e.id} role="tab" aria-selected={tab === e.id} className={tab === e.id ? 'on' : ''} onClick={() => setTab(e.id)}>
-            <span className="tml">{e.ml}</span>
-            <span className="ten">{e.en}</span>
-          </button>
-        ))}
-      </div>
-      <div key={tab} className="pane">
-        <Gallery photos={ps} />
-        {cs.length > 0 && <Videos list={cs} />}
-      </div>
+      {EVENTS.map((e) => {
+        const ps = photos.filter((p) => p.ev === e.id)
+        const cs = clips.filter((c) => c.ev === e.id)
+        return (
+          <div key={e.id} className="evsec" id={e.id}>
+            <Reveal as="h3" className="evh">
+              <span className="tml">{e.ml}</span>
+              <span className="ten">{e.en}</span>
+            </Reveal>
+            <Gallery photos={ps} />
+            {cs.length > 0 && <Videos list={cs} />}
+          </div>
+        )
+      })}
     </section>
   )
 }
