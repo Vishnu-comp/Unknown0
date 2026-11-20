@@ -28,6 +28,9 @@ import sdd2 from './data/sd2.js'
 import sdd3 from './data/sd3.js'
 import sdd4 from './data/sd4.js'
 import sdd5 from './data/sd5.js'
+import mx0 from './data/mx0.js'
+import mx1 from './data/mx1.js'
+import mx2 from './data/mx2.js'
 import sd1 from '../img/save-date.svg'
 
 // Photos the user asked to remove (handshake, hug and flower-bowl shots), kept out of the gallery
@@ -70,6 +73,8 @@ function useWide() {
   return w
 }
 const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
+const MX = { ...mx0, ...mx1, ...mx2 }
+const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05549b", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: MX[id], alt }))
 const photos = [
   { id: 'dsc02030', ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
   { id: 'dsc07413', ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
@@ -82,6 +87,7 @@ const photos = [
   { id: 'dsc09813', ev: 'rangoli', src: p8, alt: 'Couple laughing together at a celebration' },
   { id: 'dsc05575', ev: 'reception', src: p9, alt: 'Family and friends on the stage' },
   ...rangoliExtra,
+  ...moreExtra,
 ]
 
 
@@ -243,9 +249,9 @@ function Band() {
 }
 
 const clips = [
-  { ev: 'reception', id: 'v1', parts: 3, poster: v1p, label: 'Dancing together' },
-  { ev: 'wedding', id: 'v2', parts: 2, poster: v2p, label: 'The celebration' },
-  { ev: 'rangoli', id: 'v3', parts: 3, poster: v3p, label: 'Joy on the lawn' },
+  { ev: 'reception', id: 'v1', parts: 9, poster: v1p, label: 'Dancing together' },
+  { ev: 'wedding', id: 'v2', parts: 6, poster: v2p, label: 'The celebration' },
+  { ev: 'rangoli', id: 'v3', parts: 12, poster: v3p, label: 'Joy on the lawn' },
 ]
 
 // Clips are stored as base64 text chunks (the repo only accepts text files), rebuilt into a Blob in the browser.
@@ -279,10 +285,7 @@ function VideoTile({ clip }) {
             setSrc(u)
           })
         }
-        if (v) {
-          if (e.isIntersecting) v.play().catch(() => {})
-          else v.pause()
-        }
+        if (v && !e.isIntersecting) v.pause()
       },
       { threshold: 0.35, rootMargin: '200px 0px' }
     )
@@ -292,32 +295,40 @@ function VideoTile({ clip }) {
       if (url) URL.revokeObjectURL(url)
     }
   }, [clip])
-  const toggle = () => {
+  const start = () => {
     const v = vid.current
-    if (!v) return
-    if (v.paused) v.play().catch(() => {})
-    else v.pause()
+    if (v && v.paused) {
+      v.muted = false
+      v.volume = 1
+      v.play().catch(() => {})
+    }
   }
   return (
     <Reveal className="vcell">
-      <Tilt className={`vtile ${playing ? 'is-playing' : ''}`} onClick={toggle}>
+      <Tilt className={`vtile ${playing ? 'is-playing' : ''}`}>
         <div ref={wrap} className="vbox">
           <img className="vposter" src={clip.poster} alt="" />
           {src && (
             <video
               ref={vid}
               src={src}
-              muted
+              poster={clip.poster}
+              controls
               loop
               playsInline
-              autoPlay
+              preload="metadata"
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               aria-label={clip.label}
             />
           )}
+          {!playing && (
+            <button className="vplay" onClick={start} aria-label={'Play ' + clip.label + ' with sound'}>
+              <span className="tri" />
+            </button>
+          )}
           <span className="vlabel">{clip.label}</span>
-          <span className="vbadge" aria-hidden="true">{playing ? 'tap to pause' : 'tap to play'}</span>
+          {!playing && <span className="vbadge" aria-hidden="true">tap to play with sound</span>}
         </div>
       </Tilt>
     </Reveal>

@@ -224,3 +224,11 @@ footer{overflow:hidden}
 .frieze-wrap{animation-name:march2}
 .frieze-wrap .frieze.flip{transform:scaleX(-1)}
 @keyframes march2{to{transform:translateX(-33.3333%)}}
+
+.vbox::after{pointer-events:none}
+.vbox video{z-index:1;background:#2a0f08}
+.vplay{position:absolute;inset:0;margin:auto;z-index:3;width:68px;height:68px;border-radius:50%;border:2px solid var(--cream);background:rgba(107,31,16,.55);cursor:pointer;backdrop-filter:blur(4px);transition:transform .25s,background .25s}
+.vplay:hover{transform:scale(1.1);background:rgba(179,21,31,.8)}
+.vplay .tri{position:absolute;left:27px;top:20px;border-left:20px solid var(--cream);border-top:13px solid transparent;border-bottom:13px solid transparent}
+.vbadge{opacity:1!important;z-index:4;top:auto;bottom:14px;right:12px}
+.vlabel{z-index:4}
