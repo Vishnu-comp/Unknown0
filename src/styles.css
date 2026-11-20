@@ -213,3 +213,10 @@ footer{overflow:hidden}
 @media(prefers-reduced-motion:reduce){.cell,.sparkles i{animation:none!important}}
 
 .lb{z-index:30}
+
+.grid .cell{flex-basis:calc(var(--ar,.75) * 230px);max-width:calc(var(--ar,.75) * 560px)}
+@media(min-width:1000px){
+.gallery{max-width:none;padding-left:2vw;padding-right:2vw}
+.grid{max-width:1560px;gap:24px}
+.grid .cell{flex-basis:calc(var(--ar,.75) * 520px);max-width:calc(var(--ar,.75) * 820px)}
+}
