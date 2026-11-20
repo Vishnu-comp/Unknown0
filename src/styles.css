@@ -333,8 +333,8 @@ footer{overflow:hidden}
 .fb.narrow .fb-stage{perspective:1600px;touch-action:pan-y}
 .fb.narrow .fb-book{transition:none}
 .fb.narrow .fb-book{perspective:2000px;perspective-origin:50% 50%}
-.fb.narrow .fb-leaf{transition:transform .75s cubic-bezier(.45,.05,.25,1),opacity .75s cubic-bezier(.7,0,1,.6),visibility 0s linear .75s;contain:none}
-.fb.narrow .fb-leaf.flipped{visibility:hidden;opacity:0;transform:rotateY(-100deg)}
+.fb.narrow .fb-leaf{transition:transform .75s cubic-bezier(.45,.05,.25,1),opacity .75s cubic-bezier(.7,0,1,.6),visibility 0s;contain:none}
+.fb.narrow .fb-leaf.flipped{visibility:hidden;opacity:0;transform:rotateY(-100deg);transition:transform .75s cubic-bezier(.45,.05,.25,1),opacity .75s cubic-bezier(.7,0,1,.6),visibility 0s linear .75s,z-index 0s linear .75s}
 .album.turning .fb.narrow .fb-face.front{box-shadow:14px 8px 34px rgba(60,20,8,.4)}
 .fb.narrow .fb-face{box-shadow:0 6px 18px rgba(107,31,16,.22);border-radius:3px}
 .fb.narrow .fb-face.back{background:linear-gradient(90deg,#e9d3a6,#f6e6c2)}
