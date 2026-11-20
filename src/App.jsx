@@ -18,30 +18,17 @@ import p7 from '../img/dsc04815.svg'
 import p8 from '../img/dsc09813.svg'
 import p9 from '../img/dsc05575.svg'
 import r2 from '../img/rangoli2.svg'
-import rg0 from './data/rg0.js'
-import rg1 from './data/rg1.js'
-import rg2 from './data/rg2.js'
-import rg3 from './data/rg3.js'
-import sdd0 from './data/sd0.js'
-import sdd1 from './data/sd1.js'
-import sdd2 from './data/sd2.js'
-import sdd3 from './data/sd3.js'
-import sdd4 from './data/sd4.js'
-import sdd5 from './data/sd5.js'
-import EG from './data/eg.js'
-import mx0 from './data/mx0.js'
-import mx1 from './data/mx1.js'
-import mx2 from './data/mx2.js'
-import RX from './data/rx.js'
 import Flipbook from './Flipbook.jsx'
 import sd1 from '../img/save-date.svg'
 
 // Photos the user asked to remove (handshake, hug and flower-bowl shots), kept out of the gallery
 const REMOVED = new Set(['rg2', 'rg3', 'rg4', 'rg5', 'rg6', 'rg7', 'rg9', 'rg10'])
-const rangoliExtra = [...rg0, ...rg1, ...rg2, ...rg3].map((src, i) => ({ id: 'rg' + (i + 1), ev: 'rangoli', src, alt: 'Rangoli night' }))
+import PH from './photos.json'
+const thumb = (id) => `${import.meta.env.BASE_URL}photos/${id}-${PH[id].w[0][0]}.webp`
+const EG_IDS = Object.keys(PH).filter((k) => /^e\d+$/.test(k))
+const rangoliExtra = Array.from({ length: 14 }, (_, i) => ({ id: 'rg' + (i + 1), ev: 'rangoli', src: thumb('rg' + (i + 1)), alt: 'Rangoli night' }))
   .filter((p) => !REMOVED.has(p.id))
 const hiMods = import.meta.glob('./data/hi/*.js')
-import PH from './photos.json'
 const phSet = (id) => (PH[id] ? PH[id].w.map(([w]) => `${import.meta.env.BASE_URL}photos/${id}-${w}.webp ${w}w`).join(', ') : undefined)
 const phMax = (id) => { const w = PH[id].w; return `${import.meta.env.BASE_URL}photos/${id}-${w[w.length - 1][0]}.webp` }
 
@@ -78,9 +65,8 @@ function useWide() {
   }, [])
   return w
 }
-const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
-const MX = { ...mx0, ...mx1, ...mx2, ...RX }
-const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc04950", "reception", "Reception"], ["dsc04865", "reception", "Reception"], ["dsc04937", "reception", "Reception"], ["dsc04801", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: MX[id], alt }))
+const sdExtra = Array.from({ length: 22 }, (_, i) => thumb('an' + (i + 1)))
+const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc04950", "reception", "Reception"], ["dsc04865", "reception", "Reception"], ["dsc04937", "reception", "Reception"], ["dsc04801", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: thumb(id), alt }))
 const photos = [
   { id: 'dsc02030', ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
   { id: 'dsc07413', ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
@@ -580,7 +566,7 @@ function Roadmap({ counts }) {
 }
 
 function Events() {
-  const eng = Object.keys(EG).map((id) => ({ id, ev: 'engagement', src: EG[id], alt: 'Engagement' }))
+  const eng = EG_IDS.map((id) => ({ id, ev: 'engagement', src: thumb(id), alt: 'Engagement' }))
   const sd = [sd1, p2, ...sdExtra].map((src, i) => ({ id: i >= 2 ? 'an' + (i - 1) : i === 1 ? 'dsc07413' : null, src, alt: 'Amrutha and Nithin, save the date' }))
   const ORD = ['engagement', 'first', 'savedate', 'rangoli', 'wedding', 'reception']
   const seenA = new Set()
