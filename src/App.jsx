@@ -286,7 +286,7 @@ function VideoTile({ clip }) {
       ([e]) => {
         const v = vid.current
         if (e.isIntersecting && !started) {
-          started = true
+          started = true;
           (clip.file ? Promise.resolve(import.meta.env.BASE_URL + clip.file) : loadClip(clip.id, clip.parts)).then((u) => {
             url = u
             setSrc(u)
