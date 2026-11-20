@@ -28,6 +28,7 @@ import sdd2 from './data/sd2.js'
 import sdd3 from './data/sd3.js'
 import sdd4 from './data/sd4.js'
 import sdd5 from './data/sd5.js'
+import EG from './data/eg.js'
 import mx0 from './data/mx0.js'
 import mx1 from './data/mx1.js'
 import mx2 from './data/mx2.js'
@@ -256,6 +257,7 @@ const clips = [
   { ev: 'reception', id: 'v1', parts: 9, poster: v1p, label: 'Dancing together' },
   { ev: 'wedding', id: 'v2', parts: 6, poster: v2p, label: 'The celebration' },
   { ev: 'rangoli', id: 'v3', parts: 12, poster: v3p, label: 'Joy on the lawn' },
+  { ev: 'engagement', id: 'v5', file: 'vid/v5.mp4', poster: import.meta.env.BASE_URL + 'vid/v5-poster.jpg', label: 'Engagement' },
   { ev: 'wedding', id: 'v4', file: 'vid/v4.mp4', poster: import.meta.env.BASE_URL + 'vid/v4-poster.jpg', label: 'Family moments' },
 ]
 
@@ -365,7 +367,7 @@ function Ornament() {
   )
 }
 
-function SectionHead({ ml, en, n, count, small }) {
+function SectionHead({ ml, en, n, count, small, date }) {
   return (
     <Reveal as="div" className="shead">
       <span className="wm" aria-hidden="true">{n}</span>
@@ -374,6 +376,7 @@ function SectionHead({ ml, en, n, count, small }) {
         <span className="ten">{en}</span>
       </h3>
       <Ornament />
+      {date && <p className="sdate">{date}</p>}
       <p className="cnt">{count}</p>
     </Reveal>
   )
@@ -429,6 +432,7 @@ function Stats({ items }) {
 }
 
 const NAV = [
+  { id: 'engagement', label: 'Engagement' },
   { id: 'savedate', label: 'Save the date' },
   { id: 'rangoli', label: 'Rangoli night' },
   { id: 'wedding', label: 'Wedding' },
@@ -542,7 +546,40 @@ const EVENTS = [
   { id: 'reception', ml: 'റിസപ്ഷൻ', en: 'Reception' },
 ]
 
+const STOPS = [
+  { id: 'engagement', en: 'Engagement', ml: 'വിവാഹനിശ്ചയം', date: '20 Nov 2026' },
+  { id: 'savedate', en: 'Save the date', ml: 'സേവ് ദി ഡേറ്റ്' },
+  { id: 'rangoli', en: 'Rangoli night', ml: 'രംഗോലി നൈറ്റ്' },
+  { id: 'wedding', en: 'Wedding', ml: 'വിവാഹം', date: '25 Oct 2026' },
+  { id: 'reception', en: 'Reception', ml: 'റിസപ്ഷൻ' },
+  { id: 'videos', en: 'Moving memories', ml: 'വീഡിയോകൾ' },
+]
+
+function Roadmap({ counts }) {
+  return (
+    <section className="road" aria-label="Roadmap of the celebrations">
+      <Reveal as="h3" className="road-h">The journey</Reveal>
+      <Reveal as="ol" className="road-path">
+        {STOPS.map((st, i) => (
+          <li key={st.id} style={{ '--i': i }}>
+            <a href={'#' + st.id}>
+              <span className="node"><b>{i + 1}</b></span>
+              <span className="rt">
+                <span className="rml">{st.ml}</span>
+                <span className="ren">{st.en}</span>
+                {st.date && <span className="rdate">{st.date}</span>}
+                <span className="rcount">{counts[st.id]} {st.id === 'videos' ? 'videos' : 'photos'}</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </Reveal>
+    </section>
+  )
+}
+
 function Events() {
+  const eng = Object.keys(EG).map((id) => ({ id, ev: 'engagement', src: EG[id], alt: 'Engagement' }))
   const sd = [sd1, p2, ...sdExtra].map((src, i) => ({ id: i >= 2 ? 'an' + (i - 1) : i === 1 ? 'dsc07413' : null, src, alt: 'Amrutha and Nithin, save the date' }))
   return (
     <section className="events">
@@ -551,20 +588,25 @@ function Events() {
       </Reveal>
       <Stats
         items={[
-          { n: sd.length + photos.length, label: 'Photos' },
+          { n: eng.length + sd.length + photos.length, label: 'Photos' },
           { n: clips.length, label: 'Videos' },
-          { n: 4, label: 'Celebrations' },
+          { n: 5, label: 'Celebrations' },
         ]}
       />
+      <Roadmap counts={{ engagement: eng.length, savedate: sd.length, rangoli: photos.filter((p) => p.ev === 'rangoli').length, wedding: photos.filter((p) => p.ev === 'wedding').length, reception: photos.filter((p) => p.ev === 'reception').length, videos: clips.length }} />
+      <div className="evsec" id="engagement">
+        <SectionHead ml="വിവാഹനിശ്ചയം" en="Engagement" n="01" count={eng.length + ' photos'} date="20 November 2026" />
+        <Gallery photos={eng} />
+      </div>
       <div className="savedate evsec" id="savedate">
-        <SectionHead ml="സേവ് ദി ഡേറ്റ്" en="Save the date" n="01" count={sd.length + ' photos'} small />
+        <SectionHead ml="സേവ് ദി ഡേറ്റ്" en="Save the date" n="02" count={sd.length + ' photos'} small />
         <Gallery photos={sd} />
       </div>
       {EVENTS.map((e, k) => {
         const ps = photos.filter((p) => p.ev === e.id)
         return (
           <div key={e.id} className="evsec" id={e.id}>
-            <SectionHead ml={e.ml} en={e.en} n={'0' + (k + 2)} count={ps.length + ' photos'} />
+            <SectionHead ml={e.ml} en={e.en} n={'0' + (k + 3)} count={ps.length + ' photos'} date={e.id === 'wedding' ? '25 October 2026' : undefined} />
             <Gallery photos={ps} />
           </div>
         )
