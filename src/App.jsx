@@ -33,6 +33,7 @@ import mx0 from './data/mx0.js'
 import mx1 from './data/mx1.js'
 import mx2 from './data/mx2.js'
 import RX from './data/rx.js'
+import Flipbook from './Flipbook.jsx'
 import sd1 from '../img/save-date.svg'
 
 // Photos the user asked to remove (handshake, hug and flower-bowl shots), kept out of the gallery
@@ -203,10 +204,8 @@ function Hero() {
       <Sparkles />
       <div className="hero-fade" />
       <div className="hero-names" style={{ transform: `translateY(${y * -0.08}px)` }}>
-        <h1 className="ml-names">
-          <Letters text="അമൃത" /> <span className="amp">&amp;</span>
-          <br />
-          <Letters text="നിതിൻ കൃഷ്ണ" />
+        <h1 className="ml-names names-img">
+          <img src={import.meta.env.BASE_URL + 'names.png'} alt="അമൃത & നിതിൻ കൃഷ്ണ (Amrutha & Nithin Krishna)" />
         </h1>
         <p className="datebar">25 October 2026 &middot; 1202 Thulam 8</p>
         <span className="scroll-hint" aria-hidden="true">scroll</span>
@@ -433,6 +432,7 @@ function Stats({ items }) {
 }
 
 const NAV = [
+  { id: 'album', label: 'Album' },
   { id: 'engagement', label: 'Engagement' },
   { id: 'savedate', label: 'Save the date' },
   { id: 'rangoli', label: 'Rangoli night' },
@@ -582,6 +582,15 @@ function Roadmap({ counts }) {
 function Events() {
   const eng = Object.keys(EG).map((id) => ({ id, ev: 'engagement', src: EG[id], alt: 'Engagement' }))
   const sd = [sd1, p2, ...sdExtra].map((src, i) => ({ id: i >= 2 ? 'an' + (i - 1) : i === 1 ? 'dsc07413' : null, src, alt: 'Amrutha and Nithin, save the date' }))
+  const ORD = ['engagement', 'first', 'savedate', 'rangoli', 'wedding', 'reception']
+  const seenA = new Set()
+  const pool = [...eng, ...sd.filter((p) => p.id), ...photos].filter((p) => p.id && PH[p.id] && !seenA.has(p.id) && seenA.add(p.id))
+  const albumItems = []
+  const vidAfter = { engagement: ['v5'], rangoli: ['v3'], wedding: ['v2', 'v4'], reception: ['v1'] }
+  ORD.forEach((e) => {
+    pool.filter((p) => p.ev === e || (e === 'savedate' && !p.ev)).forEach((p) => albumItems.push({ t: 'photo', id: p.id, ev: p.ev || 'savedate', alt: p.alt, w: PH[p.id].w }))
+    ;(vidAfter[e] || []).forEach((id) => { const c = clips.find((x) => x.id === id); if (c) albumItems.push({ t: 'video', id: c.id, file: c.file, label: c.label }) })
+  })
   return (
     <section className="events">
       <Reveal as="h2" className="ml">
@@ -595,6 +604,7 @@ function Events() {
         ]}
       />
       <Roadmap counts={{ engagement: eng.length, savedate: sd.length, rangoli: photos.filter((p) => p.ev === 'rangoli').length, wedding: photos.filter((p) => p.ev === 'wedding').length, reception: photos.filter((p) => p.ev === 'reception').length, videos: clips.length }} />
+      <Flipbook items={albumItems} />
       <div className="evsec" id="engagement">
         <SectionHead ml="വിവാഹനിശ്ചയം" en="Engagement" n="01" count={eng.length + ' photos'} date="20 November 2026" />
         <Gallery photos={eng} />
