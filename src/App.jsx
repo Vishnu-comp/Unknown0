@@ -410,7 +410,7 @@ function Cell({ p, i, onOpen }) {
   return (
     <Reveal
       className="cell"
-      style={{ '--k': i % 7, '--dir': i % 2 ? 1 : -1, transitionDelay: (i % 3) * 120 + 'ms', flexGrow: ar * 100, flexBasis: ar * 230 + 'px', maxWidth: ar * 560 + 'px' }}
+      style={{ '--k': i % 7, '--dir': i % 2 ? 1 : -1, transitionDelay: (i % 3) * 120 + 'ms', '--ar': ar, flexGrow: ar * 100 }}
     >
       <Tilt onClick={onOpen}>
         <img
