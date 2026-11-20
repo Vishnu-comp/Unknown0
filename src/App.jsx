@@ -32,6 +32,7 @@ import EG from './data/eg.js'
 import mx0 from './data/mx0.js'
 import mx1 from './data/mx1.js'
 import mx2 from './data/mx2.js'
+import RX from './data/rx.js'
 import sd1 from '../img/save-date.svg'
 
 // Photos the user asked to remove (handshake, hug and flower-bowl shots), kept out of the gallery
@@ -77,8 +78,8 @@ function useWide() {
   return w
 }
 const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
-const MX = { ...mx0, ...mx1, ...mx2 }
-const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: MX[id], alt }))
+const MX = { ...mx0, ...mx1, ...mx2, ...RX }
+const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc04950", "reception", "Reception"], ["dsc04865", "reception", "Reception"], ["dsc04937", "reception", "Reception"], ["dsc04801", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: MX[id], alt }))
 const photos = [
   { id: 'dsc02030', ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
   { id: 'dsc07413', ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
