@@ -309,7 +309,10 @@ footer{overflow:hidden}
 .fb-face.back::after{background:linear-gradient(to left,rgba(80,30,10,.28),rgba(80,30,10,0) 9%)}
 .fb-inv{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 .fb-mat{position:absolute;inset:6% 9% 10%;display:flex;align-items:center;justify-content:center}
-.fb-mat img,.fb-mat video{max-width:100%;max-height:100%;border:6px solid #fff;box-shadow:0 4px 14px rgba(107,31,16,.3);background:#fff;display:block;object-fit:contain}
+.fb-ph{box-sizing:border-box;max-width:100%;max-height:100%;border:6px solid #fff;background:#efe0c4;box-shadow:0 4px 14px rgba(107,31,16,.3);overflow:hidden}
+.fb-ph img{width:100%;height:100%;display:block;opacity:0;transition:opacity .25s}
+.fb-ph img.ok{opacity:1}
+.fb-mat video{max-width:100%;max-height:100%;border:6px solid #fff;box-shadow:0 4px 14px rgba(107,31,16,.3);background:#fff;display:block;object-fit:contain}
 .fb-mat video{background:#000;border-color:#fff;width:100%}
 .fb-cap{position:absolute;left:0;right:0;bottom:-7%;font-family:"Playball",cursive;color:var(--gold);font-size:clamp(14px,1.5vw,19px)}
 .fb-num{position:absolute;bottom:2.4%;left:0;right:0;font-size:11px;color:var(--maroon);opacity:.5;z-index:1}
@@ -328,3 +331,13 @@ footer{overflow:hidden}
 .names-img img{width:min(88%,420px);height:auto;display:inline-block}
 @media (min-width:1000px){.hero-names .names-img img{width:min(100%,600px)}}
 .fb.narrow .fb-stage{overflow:hidden}
+
+/* phones: light slide and fade instead of the 3D turn */
+.fb.narrow .fb-stage{perspective:none}
+.fb.narrow .fb-book{transition:none}
+.fb-slide{position:absolute;inset:0;transition:transform .3s ease-out,opacity .3s ease-out;will-change:transform,opacity;contain:layout paint}
+.fb-slide .fb-face{border-radius:4px;box-shadow:0 8px 22px rgba(107,31,16,.25)}
+.fb-slide .fb-face::after{display:none}
+.fb-slide.prev{transform:translate3d(-24%,0,0);opacity:0;pointer-events:none}
+.fb-slide.next{transform:translate3d(24%,0,0);opacity:0;pointer-events:none}
+.fb-slide.cur{transform:none;opacity:1}

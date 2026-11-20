@@ -588,7 +588,7 @@ function Events() {
   const albumItems = []
   const vidAfter = { engagement: ['v5'], rangoli: ['v3'], wedding: ['v2', 'v4'], reception: ['v1'] }
   ORD.forEach((e) => {
-    pool.filter((p) => p.ev === e || (e === 'savedate' && !p.ev)).forEach((p) => albumItems.push({ t: 'photo', id: p.id, ev: p.ev || 'savedate', alt: p.alt, w: PH[p.id].w }))
+    pool.filter((p) => p.ev === e || (e === 'savedate' && !p.ev)).forEach((p) => albumItems.push({ t: 'photo', id: p.id, ev: p.ev || 'savedate', alt: p.alt, w: PH[p.id].w, ar: PH[p.id].ar }))
     ;(vidAfter[e] || []).forEach((id) => { const c = clips.find((x) => x.id === id); if (c) albumItems.push({ t: 'video', id: c.id, file: c.file, label: c.label }) })
   })
   return (

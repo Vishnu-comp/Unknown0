@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const B = import.meta.env.BASE_URL
 const EVL = { engagement: 'Engagement', first: 'Save the date', savedate: 'Save the date', rangoli: 'Rangoli night', wedding: 'Wedding', reception: 'Reception' }
+const MAT = 0.586 // width/height of the photo area on a page
 
 function useNarrow() {
   const q = '(max-width: 760px)'
@@ -15,32 +16,52 @@ function useNarrow() {
   return n
 }
 
-function Face({ p, near, side, num }) {
+// One fixed file per photo on phones (about 800 to 1200 px wide), srcset on desktop.
+function tierUrl(p) {
+  const need = Math.min(1100, window.innerWidth * (window.devicePixelRatio || 1) * 0.8)
+  const t = p.w.find(([x]) => x >= need) || p.w[p.w.length - 1]
+  return `${B}photos/${p.id}-${t[0]}.webp`
+}
+const urlOf = (p, narrow) => (p.t === 'inv' ? p.src : p.t === 'photo' ? (narrow ? tierUrl(p) : null) : null)
+
+function Photo({ p, narrow, near }) {
+  const [ok, setOk] = useState(false)
+  const box = p.ar < MAT ? { height: '100%' } : { width: '100%' }
+  const w = p.w
+  const src = narrow ? tierUrl(p) : `${B}photos/${p.id}-${w[Math.min(1, w.length - 1)][0]}.webp`
+  return (
+    <div className="fb-ph" style={{ ...box, aspectRatio: String(p.ar) }}>
+      {near && (
+        <img
+          className={ok ? 'ok' : ''}
+          src={src}
+          srcSet={narrow ? undefined : w.map(([x]) => `${B}photos/${p.id}-${x}.webp ${x}w`).join(', ')}
+          sizes="46vw"
+          alt={p.alt}
+          decoding="async"
+          draggable="false"
+          onLoad={() => setOk(true)}
+        />
+      )}
+    </div>
+  )
+}
+
+function Face({ p, near, side, num, narrow }) {
   let body = null
   if (p.t === 'inv') {
-    body = near ? <img className="fb-inv" src={p.src} alt={p.alt} draggable="false" /> : null
+    body = near ? <img className="fb-inv" src={p.src} alt={p.alt} decoding="async" draggable="false" /> : null
   } else if (p.t === 'photo') {
-    const w = p.w
     body = (
       <div className="fb-mat">
-        {near && (
-          <img
-            src={`${B}photos/${p.id}-${w[Math.min(1, w.length - 1)][0]}.webp`}
-            srcSet={w.map(([x]) => `${B}photos/${p.id}-${x}.webp ${x}w`).join(', ')}
-            sizes="(max-width:760px) 88vw, 46vw"
-            alt={p.alt}
-            draggable="false"
-          />
-        )}
+        <Photo p={p} narrow={narrow} near={near} />
         <span className="fb-cap">{EVL[p.ev] || ''}</span>
       </div>
     )
   } else if (p.t === 'video') {
     body = (
       <div className="fb-mat fb-vid">
-        {near && (
-          <video controls playsInline preload="none" poster={B + 'vid/' + p.id + '-poster.jpg'} src={B + p.file} />
-        )}
+        {near && <video controls playsInline preload="none" poster={B + 'vid/' + p.id + '-poster.jpg'} src={B + p.file} />}
         <span className="fb-cap">{p.label}</span>
       </div>
     )
@@ -70,8 +91,8 @@ export default function Flipbook({ items }) {
 
   const pages = useMemo(() => {
     const P = [
-      { t: 'inv', src: B + 'album/inv-1.jpg', alt: 'Wedding invitation, front' },
-      { t: 'inv', src: B + 'album/inv-2.jpg', alt: 'Wedding invitation, details' },
+      { t: 'inv', src: B + 'album/inv-1.webp', alt: 'Wedding invitation, front' },
+      { t: 'inv', src: B + 'album/inv-2.webp', alt: 'Wedding invitation, details' },
       ...items,
       { t: 'end' },
     ]
@@ -80,13 +101,13 @@ export default function Flipbook({ items }) {
   }, [items, narrow])
 
   const leaves = useMemo(() => {
-    if (narrow) return pages.map((p) => [p, null])
+    if (narrow) return []
     const L = []
     for (let i = 0; i < pages.length; i += 2) L.push([pages[i], pages[i + 1]])
     return L
   }, [pages, narrow])
 
-  const N = leaves.length
+  const N = narrow ? pages.length : leaves.length
   const max = narrow ? N - 1 : N
   useEffect(() => setK(0), [narrow])
   const go = useCallback((d) => setK((x) => Math.max(0, Math.min(max, x + d))), [max])
@@ -94,6 +115,15 @@ export default function Flipbook({ items }) {
   useEffect(() => {
     root.current && root.current.querySelectorAll('video').forEach((v) => v.pause())
   }, [k])
+
+  // Phones: warm the cache for the next and previous few pages.
+  useEffect(() => {
+    if (!narrow) return
+    for (let j = k - 2; j <= k + 3; j++) {
+      const u = pages[j] && urlOf(pages[j], true)
+      if (u) { const im = new Image(); im.decoding = 'async'; im.src = u }
+    }
+  }, [k, narrow, pages])
 
   useEffect(() => {
     const el = root.current
@@ -140,21 +170,31 @@ export default function Flipbook({ items }) {
       <p className="album-sub">Flip through the pages. Swipe, tap the page edges, use the arrows or your keyboard.</p>
       <div className={`fb ${narrow ? 'narrow' : ''}`}>
         <div className="fb-stage" onPointerDown={down} onPointerUp={up} onPointerCancel={() => (start.current = null)}>
-          <div className="fb-book" style={{ transform: `translateX(${shift}%)` }}>
-            {leaves.map(([f, b], i) => {
-              const flipped = i < k
-              return (
-                <div
-                  key={i}
-                  data-v={(f.t === 'video' || (b && b.t === 'video')) ? '1' : undefined}
-                  className={`fb-leaf ${flipped ? 'flipped' : ''} ${i >= k - 2 && i <= k + 1 ? 'sh' : ''}`}
-                  style={{ zIndex: flipped ? i + 1 : N - i + 1 }}
-                >
-                  <Face p={f} near={Math.abs(i - k) <= 2} side="front" num={narrow ? i + 1 : 2 * i + 1} />
-                  {b ? <Face p={b} near={Math.abs(i - k) <= 2} side="back" num={2 * i + 2} /> : <div className="fb-face back blank" />}
-                </div>
-              )
-            })}
+          <div className="fb-book" style={{ transform: narrow ? undefined : `translateX(${shift}%)` }}>
+            {narrow
+              ? pages.map((p, i) => {
+                  if (Math.abs(i - k) > 1) return null
+                  return (
+                    <div key={i} className={`fb-slide ${i < k ? 'prev' : i > k ? 'next' : 'cur'}`} aria-hidden={i !== k}>
+                      <Face p={p} near={Math.abs(i - k) <= 1} side="front" num={i + 1} narrow />
+                    </div>
+                  )
+                })
+              : leaves.map(([f, b], i) => {
+                  if (i < k - 2 || i > k + 2) return null
+                  const flipped = i < k
+                  return (
+                    <div
+                      key={i}
+                      data-v={f.t === 'video' || (b && b.t === 'video') ? '1' : undefined}
+                      className={`fb-leaf ${flipped ? 'flipped' : ''} ${i >= k - 2 && i <= k + 1 ? 'sh' : ''}`}
+                      style={{ zIndex: flipped ? i + 1 : N - i + 1 }}
+                    >
+                      <Face p={f} near={Math.abs(i - k) <= 2} side="front" num={2 * i + 1} />
+                      {b ? <Face p={b} near={Math.abs(i - k) <= 2} side="back" num={2 * i + 2} /> : <div className="fb-face back blank" />}
+                    </div>
+                  )
+                })}
             <button className="fb-zone l" aria-label="Previous page" onClick={() => go(-1)} disabled={k === 0} />
             <button className="fb-zone r" aria-label="Next page" onClick={() => go(1)} disabled={k === max} />
           </div>
