@@ -77,7 +77,7 @@ function useWide() {
 }
 const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
 const MX = { ...mx0, ...mx1, ...mx2 }
-const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05549b", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: MX[id], alt }))
+const moreExtra = [["i185443_597", "rangoli", "Rangoli night"], ["i185444_182", "rangoli", "Rangoli night"], ["i185506_641", "rangoli", "Rangoli night"], ["i185507_301", "rangoli", "Rangoli night"], ["i185507_208", "rangoli", "Rangoli night"], ["i185522_667", "rangoli", "Rangoli night"], ["i185526_347", "rangoli", "Rangoli night"], ["dsc05549", "reception", "Reception"], ["dsc05550", "reception", "Reception"], ["dsc03399", "wedding", "Wedding"], ["dsc01978", "wedding", "Wedding"], ["dsc02339", "wedding", "Wedding"], ["dsc03354", "wedding", "Wedding"]].map(([id, ev, alt]) => ({ id, ev, src: MX[id], alt }))
 const photos = [
   { id: 'dsc02030', ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
   { id: 'dsc07413', ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
@@ -255,6 +255,7 @@ const clips = [
   { ev: 'reception', id: 'v1', parts: 9, poster: v1p, label: 'Dancing together' },
   { ev: 'wedding', id: 'v2', parts: 6, poster: v2p, label: 'The celebration' },
   { ev: 'rangoli', id: 'v3', parts: 12, poster: v3p, label: 'Joy on the lawn' },
+  { ev: 'wedding', id: 'v4', file: 'vid/v4.mp4', poster: import.meta.env.BASE_URL + 'vid/v4-poster.jpg', label: 'Family moments' },
 ]
 
 // Clips are stored as base64 text chunks (the repo only accepts text files), rebuilt into a Blob in the browser.
@@ -283,7 +284,7 @@ function VideoTile({ clip }) {
         const v = vid.current
         if (e.isIntersecting && !started) {
           started = true
-          loadClip(clip.id, clip.parts).then((u) => {
+          (clip.file ? Promise.resolve(import.meta.env.BASE_URL + clip.file) : loadClip(clip.id, clip.parts)).then((u) => {
             url = u
             setSrc(u)
           })
