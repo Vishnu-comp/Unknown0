@@ -330,14 +330,14 @@ footer{overflow:hidden}
 .names-img{line-height:0}
 .names-img img{width:min(88%,420px);height:auto;display:inline-block}
 @media (min-width:1000px){.hero-names .names-img img{width:min(100%,600px)}}
-.fb.narrow .fb-stage{overflow:hidden}
-
-/* phones: light slide and fade instead of the 3D turn */
-.fb.narrow .fb-stage{perspective:none}
+.fb.narrow .fb-stage{perspective:1600px;touch-action:pan-y}
 .fb.narrow .fb-book{transition:none}
-.fb-slide{position:absolute;inset:0;transition:transform .3s ease-out,opacity .3s ease-out;will-change:transform,opacity;contain:layout paint}
-.fb-slide .fb-face{border-radius:4px;box-shadow:0 8px 22px rgba(107,31,16,.25)}
-.fb-slide .fb-face::after{display:none}
-.fb-slide.prev{transform:translate3d(-24%,0,0);opacity:0;pointer-events:none}
-.fb-slide.next{transform:translate3d(24%,0,0);opacity:0;pointer-events:none}
-.fb-slide.cur{transform:none;opacity:1}
+.fb.narrow .fb-book{perspective:2000px;perspective-origin:50% 50%}
+.fb.narrow .fb-leaf{transition:transform .75s cubic-bezier(.45,.05,.25,1),opacity .75s cubic-bezier(.7,0,1,.6),visibility 0s linear .75s;contain:none}
+.fb.narrow .fb-leaf.flipped{visibility:hidden;opacity:0;transform:rotateY(-100deg)}
+.album.turning .fb.narrow .fb-face.front{box-shadow:14px 8px 34px rgba(60,20,8,.4)}
+.fb.narrow .fb-face{box-shadow:0 6px 18px rgba(107,31,16,.22);border-radius:3px}
+.fb.narrow .fb-face.back{background:linear-gradient(90deg,#e9d3a6,#f6e6c2)}
+.fb.narrow .fb-face.front::after{background:linear-gradient(to right,rgba(80,30,10,.22),rgba(80,30,10,0) 6%)}
+.album.turning .fb.narrow .fb-leaf{will-change:transform}
+.album.drag .fb.narrow .fb-leaf{transition:none}

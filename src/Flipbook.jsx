@@ -142,18 +142,71 @@ export default function Flipbook({ items }) {
     }
   }, [go])
 
+  const dragged = useRef(false)
+  const tm = useRef(0)
+  const turning = () => {
+    const r = root.current
+    if (!r) return
+    r.classList.add('turning')
+    clearTimeout(tm.current)
+    tm.current = setTimeout(() => r.classList.remove('turning'), 900)
+  }
+  useEffect(() => { if (narrow) turning() }, [k])
+  const leafEl = (i) => root.current && root.current.querySelector(`.fb-leaf[data-i="${i}"]`)
   const down = (e) => {
     if (e.target.closest('video')) return
-    start.current = { x: e.clientX, y: e.clientY }
+    start.current = { x: e.clientX, y: e.clientY, t: Date.now(), mode: 0, el: null }
+    dragged.current = false
   }
-  const up = (e) => {
+  const move = (e) => {
+    const s = start.current
+    if (!s || !narrow) return
+    const dx = e.clientX - s.x
+    const dy = e.clientY - s.y
+    if (!s.mode) {
+      if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.2) return
+      const dir = dx < 0 ? 1 : -1
+      const idx = dir === 1 ? k : k - 1
+      const el = leafEl(idx)
+      if (!el || (dir === 1 && k >= max) || (dir === -1 && k <= 0)) { s.mode = 9; return }
+      s.mode = dir; s.el = el; s.w = el.offsetWidth || 300
+      el.style.transition = 'none'
+      el.style.visibility = 'visible'
+      el.style.willChange = 'transform'
+      root.current.classList.add('turning', 'drag')
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    }
+    if (s.mode === 9) return
+    dragged.current = true
+    const p = Math.max(0, Math.min(1, Math.abs(dx) / (s.w * 0.9)))
+    s.p = p
+    const q = s.mode === 1 ? p : 1 - p
+    s.el.style.transform = `rotateY(${-q * 100}deg)`
+    s.el.style.opacity = String(1 - q ** 5)
+  }
+  const end = (e) => {
     const s = start.current
     start.current = null
     if (!s) return
+    if (s.mode === 1 || s.mode === -1) {
+      const fast = Date.now() - s.t < 350 && s.p > 0.08
+      const commit = s.p > 0.3 || fast
+      s.el.style.transition = ''
+      s.el.style.transform = ''
+      s.el.style.visibility = ''
+      s.el.style.opacity = ''
+      s.el.style.willChange = ''
+      root.current.classList.remove('drag')
+      if (commit) go(s.mode)
+      else turning()
+      return
+    }
+    if (s.mode === 9 || narrow) return
     const dx = e.clientX - s.x
     const dy = e.clientY - s.y
     if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.2) go(dx < 0 ? 1 : -1)
   }
+  const zone = (d) => () => { if (!dragged.current) go(d) }
 
   const shift = narrow ? 0 : k === 0 ? -25 : k === N ? 25 : 0
   const label = narrow
@@ -169,14 +222,21 @@ export default function Flipbook({ items }) {
       <h3 className="vh">The album</h3>
       <p className="album-sub">Flip through the pages. Swipe, tap the page edges, use the arrows or your keyboard.</p>
       <div className={`fb ${narrow ? 'narrow' : ''}`}>
-        <div className="fb-stage" onPointerDown={down} onPointerUp={up} onPointerCancel={() => (start.current = null)}>
+        <div className="fb-stage" onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
           <div className="fb-book" style={{ transform: narrow ? undefined : `translateX(${shift}%)` }}>
             {narrow
               ? pages.map((p, i) => {
-                  if (Math.abs(i - k) > 1) return null
+                  if (i < k - 1 || i > k + 1) return null
                   return (
-                    <div key={i} className={`fb-slide ${i < k ? 'prev' : i > k ? 'next' : 'cur'}`} aria-hidden={i !== k}>
-                      <Face p={p} near={Math.abs(i - k) <= 1} side="front" num={i + 1} narrow />
+                    <div
+                      key={i}
+                      data-i={i}
+                      className={`fb-leaf ${i < k ? 'flipped' : ''}`}
+                      style={{ zIndex: i < k ? i + 1 : pages.length - i + 1 }}
+                      aria-hidden={i !== k}
+                    >
+                      <Face p={p} near side="front" num={i + 1} narrow />
+                      <div className="fb-face back blank" />
                     </div>
                   )
                 })
@@ -195,8 +255,8 @@ export default function Flipbook({ items }) {
                     </div>
                   )
                 })}
-            <button className="fb-zone l" aria-label="Previous page" onClick={() => go(-1)} disabled={k === 0} />
-            <button className="fb-zone r" aria-label="Next page" onClick={() => go(1)} disabled={k === max} />
+            <button className="fb-zone l" aria-label="Previous page" onClick={zone(-1)} disabled={k === 0} />
+            <button className="fb-zone r" aria-label="Next page" onClick={zone(1)} disabled={k === max} />
           </div>
         </div>
         <div className="fb-ctl">
