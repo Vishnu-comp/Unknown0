@@ -38,12 +38,15 @@ const REMOVED = new Set(['rg2', 'rg3', 'rg4', 'rg5', 'rg6', 'rg7', 'rg9', 'rg10'
 const rangoliExtra = [...rg0, ...rg1, ...rg2, ...rg3].map((src, i) => ({ id: 'rg' + (i + 1), ev: 'rangoli', src, alt: 'Rangoli night' }))
   .filter((p) => !REMOVED.has(p.id))
 const hiMods = import.meta.glob('./data/hi/*.js')
+import PH from './photos.json'
+const phSet = (id) => (PH[id] ? PH[id].w.map(([w]) => `${import.meta.env.BASE_URL}photos/${id}-${w}.webp ${w}w`).join(', ') : undefined)
+const phMax = (id) => { const w = PH[id].w; return `${import.meta.env.BASE_URL}photos/${id}-${w[w.length - 1][0]}.webp` }
 
 function useHi(id, want, ref) {
   const [hi, setHi] = useState(null)
   useEffect(() => {
     const load = hiMods['./data/hi/' + id + '.js']
-    if (!id || !load || (hi && hi.id === id)) return
+    if (!id || PH[id] || !load || (hi && hi.id === id)) return
     if (want === true) {
       load().then((m) => setHi({ id, src: m.default }))
       return
@@ -455,7 +458,7 @@ function Nav() {
 }
 
 function Cell({ p, i, onOpen }) {
-  const [ar, setAr] = useState(0.75)
+  const [ar, setAr] = useState(PH[p.id] ? PH[p.id].ar : 0.75)
   const imgRef = useRef(null)
   const wide = useWide()
   const hi = useHi(p.id, wide, imgRef)
@@ -468,7 +471,10 @@ function Cell({ p, i, onOpen }) {
         <img
           ref={imgRef}
           loading="lazy"
-          src={hi || p.src}
+          src={PH[p.id] ? phMax(p.id) : hi || p.src}
+          srcSet={phSet(p.id)}
+          style={{ background: `center / cover url(${p.src})`, aspectRatio: PH[p.id] ? PH[p.id].ar : undefined }}
+          sizes="(min-width: 1000px) 50vw, 100vw"
           alt={p.alt}
           onLoad={(e) => e.currentTarget.naturalHeight && setAr(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
         />
@@ -513,7 +519,7 @@ function Gallery({ photos }) {
           }}
         >
           <button className="nav prev" aria-label="Previous photo" onClick={(e) => { e.stopPropagation(); step(-1) }}>&#8249;</button>
-          <img key={open} src={hiLb || photos[open].src} alt={photos[open].alt} onClick={(e) => e.stopPropagation()} />
+          <img key={open} src={PH[photos[open].id] ? phMax(photos[open].id) : hiLb || photos[open].src} srcSet={phSet(photos[open].id)} sizes="100vw" alt={photos[open].alt} onClick={(e) => e.stopPropagation()} />
           <button className="nav next" aria-label="Next photo" onClick={(e) => { e.stopPropagation(); step(1) }}>&#8250;</button>
           <button className="close" aria-label="Close" onClick={(e) => { e.stopPropagation(); close() }}>&times;</button>
           <div className="thumbs" onClick={(e) => e.stopPropagation()}>
