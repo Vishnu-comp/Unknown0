@@ -30,7 +30,42 @@ import sdd4 from './data/sd4.js'
 import sdd5 from './data/sd5.js'
 import sd1 from '../img/save-date.svg'
 
-const rangoliExtra = [...rg0, ...rg1, ...rg2, ...rg3].map((src) => ({ ev: 'rangoli', src, alt: 'Rangoli night' }))
+const rangoliExtra = [...rg0, ...rg1, ...rg2, ...rg3].map((src, i) => ({ id: 'rg' + (i + 1), ev: 'rangoli', src, alt: 'Rangoli night' }))
+const hiMods = import.meta.glob('./data/hi/*.js')
+
+function useHi(id, want, ref) {
+  const [hi, setHi] = useState(null)
+  useEffect(() => {
+    const load = hiMods['./data/hi/' + id + '.js']
+    if (!id || !load || (hi && hi.id === id)) return
+    if (want === true) {
+      load().then((m) => setHi({ id, src: m.default }))
+      return
+    }
+    const el = ref && ref.current
+    if (!want || !el || !('IntersectionObserver' in window)) return
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) {
+        io.disconnect()
+        load().then((m) => setHi({ id, src: m.default }))
+      }
+    }, { rootMargin: '700px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [id, want, hi])
+  return hi && hi.id === id ? hi.src : null
+}
+
+function useWide() {
+  const [w, setW] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1000px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1000px)')
+    const f = () => setW(mq.matches)
+    mq.addEventListener('change', f)
+    return () => mq.removeEventListener('change', f)
+  }, [])
+  return w
+}
 const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
 const photos = [
   { ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
@@ -407,6 +442,9 @@ function Nav() {
 
 function Cell({ p, i, onOpen }) {
   const [ar, setAr] = useState(0.75)
+  const imgRef = useRef(null)
+  const wide = useWide()
+  const hi = useHi(p.id, wide, imgRef)
   return (
     <Reveal
       className="cell"
@@ -414,8 +452,9 @@ function Cell({ p, i, onOpen }) {
     >
       <Tilt onClick={onOpen}>
         <img
+          ref={imgRef}
           loading="lazy"
-          src={p.src}
+          src={hi || p.src}
           alt={p.alt}
           onLoad={(e) => e.currentTarget.naturalHeight && setAr(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
         />
@@ -441,6 +480,7 @@ function Gallery({ photos }) {
     document.body.style.overflow = open === null ? '' : 'hidden'
   }, [open])
   const touch = useRef(0)
+  const hiLb = useHi(open === null ? null : photos[open].id, true)
   return (
     <section className="gallery">
       <div className="grid">
@@ -459,7 +499,7 @@ function Gallery({ photos }) {
           }}
         >
           <button className="nav prev" aria-label="Previous photo" onClick={(e) => { e.stopPropagation(); step(-1) }}>&#8249;</button>
-          <img key={open} src={photos[open].src} alt={photos[open].alt} onClick={(e) => e.stopPropagation()} />
+          <img key={open} src={hiLb || photos[open].src} alt={photos[open].alt} onClick={(e) => e.stopPropagation()} />
           <button className="nav next" aria-label="Next photo" onClick={(e) => { e.stopPropagation(); step(1) }}>&#8250;</button>
           <button className="close" aria-label="Close" onClick={(e) => { e.stopPropagation(); close() }}>&times;</button>
           <div className="thumbs" onClick={(e) => e.stopPropagation()}>
@@ -481,7 +521,7 @@ const EVENTS = [
 ]
 
 function Events() {
-  const sd = [sd1, p2, ...sdExtra].map((src) => ({ src, alt: 'Amrutha and Nithin, save the date' }))
+  const sd = [sd1, p2, ...sdExtra].map((src, i) => ({ id: i >= 2 ? 'an' + (i - 1) : null, src, alt: 'Amrutha and Nithin, save the date' }))
   return (
     <section className="events">
       <Reveal as="h2" className="ml">
