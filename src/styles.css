@@ -220,3 +220,7 @@ footer{overflow:hidden}
 .grid{max-width:1560px;gap:24px}
 .grid .cell{flex-basis:calc(var(--ar,.75) * 520px);max-width:calc(var(--ar,.75) * 820px)}
 }
+
+.frieze-wrap{animation-name:march2}
+.frieze-wrap .frieze.flip{transform:scaleX(-1)}
+@keyframes march2{to{transform:translateX(-33.3333%)}}
