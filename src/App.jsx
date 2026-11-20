@@ -254,9 +254,9 @@ function Band() {
 }
 
 const clips = [
-  { ev: 'reception', id: 'v1', parts: 9, poster: v1p, label: 'Dancing together' },
-  { ev: 'wedding', id: 'v2', parts: 6, poster: v2p, label: 'The celebration' },
-  { ev: 'rangoli', id: 'v3', parts: 12, poster: v3p, label: 'Joy on the lawn' },
+  { ev: 'reception', id: 'v1', file: 'vid/v1.mp4', poster: import.meta.env.BASE_URL + 'vid/v1-poster.jpg', label: 'Dancing together' },
+  { ev: 'wedding', id: 'v2', file: 'vid/v2.mp4', poster: import.meta.env.BASE_URL + 'vid/v2-poster.jpg', label: 'The celebration' },
+  { ev: 'rangoli', id: 'v3', file: 'vid/v3.mp4', poster: import.meta.env.BASE_URL + 'vid/v3-poster.jpg', label: 'Joy on the lawn' },
   { ev: 'engagement', id: 'v5', wide: true, file: 'vid/v5.mp4', poster: import.meta.env.BASE_URL + 'vid/v5-poster.jpg', label: 'Engagement' },
   { ev: 'wedding', id: 'v4', wide: true, file: 'vid/v4.mp4', poster: import.meta.env.BASE_URL + 'vid/v4-poster.jpg', label: 'Family moments' },
 ]
