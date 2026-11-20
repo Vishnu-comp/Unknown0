@@ -30,7 +30,10 @@ import sdd4 from './data/sd4.js'
 import sdd5 from './data/sd5.js'
 import sd1 from '../img/save-date.svg'
 
+// Photos the user asked to remove (handshake, hug and flower-bowl shots), kept out of the gallery
+const REMOVED = new Set(['rg2', 'rg3', 'rg4', 'rg5', 'rg6', 'rg7', 'rg9', 'rg10'])
 const rangoliExtra = [...rg0, ...rg1, ...rg2, ...rg3].map((src, i) => ({ id: 'rg' + (i + 1), ev: 'rangoli', src, alt: 'Rangoli night' }))
+  .filter((p) => !REMOVED.has(p.id))
 const hiMods = import.meta.glob('./data/hi/*.js')
 
 function useHi(id, want, ref) {
