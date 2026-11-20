@@ -280,3 +280,9 @@ footer{overflow:hidden}
   .node{margin:0}
   .rdate{align-self:flex-start}
 }
+
+/* landscape clips: full width, 16:9, no crop */
+.vcell.wide{width:100%;max-width:980px}
+.vcell.wide .vbox{aspect-ratio:16/9}
+.vcell.wide .vbox video,.vcell.wide .vbox .vposter{object-fit:contain;background:#000}
+@media(min-width:800px){.vcell.wide{grid-column:1/-1}}

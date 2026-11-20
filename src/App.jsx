@@ -257,8 +257,8 @@ const clips = [
   { ev: 'reception', id: 'v1', parts: 9, poster: v1p, label: 'Dancing together' },
   { ev: 'wedding', id: 'v2', parts: 6, poster: v2p, label: 'The celebration' },
   { ev: 'rangoli', id: 'v3', parts: 12, poster: v3p, label: 'Joy on the lawn' },
-  { ev: 'engagement', id: 'v5', file: 'vid/v5.mp4', poster: import.meta.env.BASE_URL + 'vid/v5-poster.jpg', label: 'Engagement' },
-  { ev: 'wedding', id: 'v4', file: 'vid/v4.mp4', poster: import.meta.env.BASE_URL + 'vid/v4-poster.jpg', label: 'Family moments' },
+  { ev: 'engagement', id: 'v5', wide: true, file: 'vid/v5.mp4', poster: import.meta.env.BASE_URL + 'vid/v5-poster.jpg', label: 'Engagement' },
+  { ev: 'wedding', id: 'v4', wide: true, file: 'vid/v4.mp4', poster: import.meta.env.BASE_URL + 'vid/v4-poster.jpg', label: 'Family moments' },
 ]
 
 // Clips are stored as base64 text chunks (the repo only accepts text files), rebuilt into a Blob in the browser.
@@ -311,7 +311,7 @@ function VideoTile({ clip }) {
     }
   }
   return (
-    <Reveal className="vcell">
+    <Reveal className={clip.wide ? 'vcell wide' : 'vcell'}>
       <Tilt className={`vtile ${playing ? 'is-playing' : ''}`}>
         <div ref={wrap} className="vbox">
           <img className="vposter" src={clip.poster} alt="" />
