@@ -232,3 +232,20 @@ footer{overflow:hidden}
 .vplay .tri{position:absolute;left:27px;top:20px;border-left:20px solid var(--cream);border-top:13px solid transparent;border-bottom:13px solid transparent}
 .vbadge{opacity:1!important;z-index:4;top:auto;bottom:14px;right:12px}
 .vlabel{z-index:4}
+
+/* desktop hero: fill the width, artwork + names side by side over a soft blurred backdrop */
+.hero-bg{display:none}
+@media (min-width:1000px){
+  .hero{max-width:none;display:grid;grid-template-columns:minmax(380px,540px) minmax(380px,600px);justify-content:center;align-items:center;column-gap:clamp(48px,7vw,130px);min-height:100vh;padding:48px 4vw}
+  .hero-bg{display:block;position:absolute;inset:-60px;background-size:cover;background-position:center 30%;filter:blur(46px) saturate(1.25);opacity:.62;transform:scale(1.15);z-index:0}
+  .hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(transparent,var(--cream));z-index:1;pointer-events:none}
+  .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(252,228,188,0) 20%,rgba(252,228,188,.55) 85%);z-index:1;pointer-events:none}
+  .hero-frame{position:relative;z-index:2;border-radius:260px 260px 28px 28px;overflow:hidden;box-shadow:0 30px 70px rgba(107,31,16,.35),0 0 0 6px rgba(252,228,188,.85),0 0 0 8px rgba(184,137,46,.7)}
+  .hero-fade{display:none}
+  .hero-names{z-index:2;margin:0;text-align:left;padding:0}
+  .hero-names .ml-names{font-size:clamp(56px,5.4vw,104px);line-height:1.12}
+  .hero-names .datebar{font-size:clamp(18px,1.5vw,26px);padding:9px 30px}
+  .scroll-hint{margin-top:28px}
+  .scroll-hint::after{margin-left:0}
+  .hero-art{width:100%;height:100%;aspect-ratio:847/800;object-fit:cover;object-position:top}
+}

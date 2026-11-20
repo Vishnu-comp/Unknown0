@@ -194,6 +194,7 @@ function Hero() {
   const y = useScrollY()
   return (
     <header className="hero">
+      <div className="hero-bg" style={{ backgroundImage: `url(${hero})` }} />
       <div className="hero-frame" style={{ transform: `translateY(${y * 0.25}px) scale(${1 + Math.min(y, 600) * 0.0002})` }}>
         <img className="hero-art" src={hero} alt="Guruvayoor temple with the couple walking hand in hand" />
       </div>
