@@ -78,7 +78,7 @@ const photos = [
   { id: 'dsc01957', ev: 'wedding', src: p5, alt: 'Close portrait with garlands' },
   { id: 'dsc04860', ev: 'reception', src: p6, alt: 'Couple outside a white house' },
   { id: 'dsc04815', ev: 'reception', src: p7, alt: 'Couple in formal wear in a garden' },
-  { ev: 'rangoli', src: r2, alt: 'Family together before the marigold backdrop' },
+  { id: 'r2', ev: 'rangoli', src: r2, alt: 'Family together before the marigold backdrop' },
   { id: 'dsc09813', ev: 'rangoli', src: p8, alt: 'Couple laughing together at a celebration' },
   { id: 'dsc05575', ev: 'reception', src: p9, alt: 'Family and friends on the stage' },
   ...rangoliExtra,
@@ -568,8 +568,9 @@ export default function App() {
       </main>
       <footer>
         <div className="frieze-wrap">
-          <img className="frieze" src={frieze} alt="Line drawing of a wedding procession" />
-          <img className="frieze" src={frieze} alt="" aria-hidden="true" />
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <img key={i} className={`frieze ${i % 2 ? 'flip' : ''}`} src={frieze} alt={i === 0 ? 'Line drawing of a wedding procession' : ''} aria-hidden={i === 0 ? undefined : 'true'} />
+          ))}
         </div>
         <p>Amrutha &amp; Nithin Krishna &middot; Guruvayoor &middot; 25 October 2026</p>
       </footer>
