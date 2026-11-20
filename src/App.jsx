@@ -68,16 +68,16 @@ function useWide() {
 }
 const sdExtra = [...sdd0, ...sdd1, ...sdd2, ...sdd3, ...sdd4, ...sdd5]
 const photos = [
-  { ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
-  { ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
-  { ev: 'wedding', src: p3, alt: 'The couple seated before the lamp' },
-  { ev: 'wedding', src: p4, alt: 'Family on stage around the lamp' },
-  { ev: 'wedding', src: p5, alt: 'Close portrait with garlands' },
-  { ev: 'reception', src: p6, alt: 'Couple outside a white house' },
-  { ev: 'reception', src: p7, alt: 'Couple in formal wear in a garden' },
+  { id: 'dsc02030', ev: 'wedding', src: p1, alt: 'Couple walking hand in hand wearing fresh leaf garlands' },
+  { id: 'dsc07413', ev: 'first', src: p2, alt: 'Amrutha and Nithin on a stone courtyard' },
+  { id: 'dsc03377', ev: 'wedding', src: p3, alt: 'The couple seated before the lamp' },
+  { id: 'dsc03420', ev: 'wedding', src: p4, alt: 'Family on stage around the lamp' },
+  { id: 'dsc01957', ev: 'wedding', src: p5, alt: 'Close portrait with garlands' },
+  { id: 'dsc04860', ev: 'reception', src: p6, alt: 'Couple outside a white house' },
+  { id: 'dsc04815', ev: 'reception', src: p7, alt: 'Couple in formal wear in a garden' },
   { ev: 'rangoli', src: r2, alt: 'Family together before the marigold backdrop' },
-  { ev: 'rangoli', src: p8, alt: 'Couple laughing together at a celebration' },
-  { ev: 'reception', src: p9, alt: 'Family and friends on the stage' },
+  { id: 'dsc09813', ev: 'rangoli', src: p8, alt: 'Couple laughing together at a celebration' },
+  { id: 'dsc05575', ev: 'reception', src: p9, alt: 'Family and friends on the stage' },
   ...rangoliExtra,
 ]
 
@@ -521,7 +521,7 @@ const EVENTS = [
 ]
 
 function Events() {
-  const sd = [sd1, p2, ...sdExtra].map((src, i) => ({ id: i >= 2 ? 'an' + (i - 1) : null, src, alt: 'Amrutha and Nithin, save the date' }))
+  const sd = [sd1, p2, ...sdExtra].map((src, i) => ({ id: i >= 2 ? 'an' + (i - 1) : i === 1 ? 'dsc07413' : null, src, alt: 'Amrutha and Nithin, save the date' }))
   return (
     <section className="events">
       <Reveal as="h2" className="ml">
